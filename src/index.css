@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    transition:
+      background-color 0.3s ease,
+      color 0.3s ease;
+    @apply font-sans antialiased;
+  }
+}
+
+/* Custom UI dynamic scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(156, 163, 175, 0.3);
+  border-radius: 4px;
+}
+
+body,
+div,
+header,
+aside,
+main,
+nav,
+button {
+  transition:
+    background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 1. OBSIDIAN (Now Carbon Cyberpunk) 
+   Swapped pure dead-black for a deep, high-end technical matte carbon. */
+.theme-obsidian {
+  --bg-core: #090a0f; /* Pure deep space depth */
+  --bg-surface: #12131a; /* Premium card/sidebar surface */
+  --bg-header: rgba(18, 19, 26, 0.75); /* Frosted glass finish */
+  --text-core: #f1f2f4; /* Crisp, clean off-white */
+  --border-subtle: rgba(255, 255, 255, 0.04);
+}
+
+/* 2. SLATE (Now Studio Industrial)
+   Swapped muddy blue-gray for a beautiful, neutral titanium-graphite tone. */
+.theme-slate {
+  --bg-core: #121214; /* Sleek charcoal foundry base */
+  --bg-surface: #1a1a1e; /* Elevated studio metal surface */
+  --bg-header: rgba(26, 26, 30, 0.8);
+  --text-core: #e4e4e7; /* Beautiful zinc gray text */
+  --border-subtle: rgba(255, 255, 255, 0.05);
+}
+
+/* 3. NORD (Now Alpine Aurora)
+   Cleaned up the navy to use an elegant, cold-toned arctic twilight palette. */
+.theme-nord {
+  --bg-core: #0d1117; /* Deep arctic sea floor */
+  --bg-surface: #161b22; /* Refined glacier-shadow panel */
+  --bg-header: rgba(22, 27, 34, 0.8);
+  --text-core: #ecf0f6; /* Bright frost text */
+  --border-subtle: rgba(255, 255, 255, 0.05);
+}
+
+/* 4. CRIMSON — Blood Vault */
+.theme-crimson {
+  --bg-core: #0e0a0a;
+  --bg-surface: #1a1010;
+  --bg-header: rgba(26, 16, 16, 0.8);
+  --text-core: #f4ecec;
+  --border-subtle: rgba(255, 255, 255, 0.04);
+}
+
+/* 5. VIOLET — Neon Cathedral */
+.theme-violet {
+  --bg-core: #0b0a12;
+  --bg-surface: #13111e;
+  --bg-header: rgba(19, 17, 30, 0.8);
+  --text-core: #ede9f8;
+  --border-subtle: rgba(255, 255, 255, 0.05);
+}
+
+/* 6. AMBER — Forge Warmth */
+.theme-amber {
+  --bg-core: #0e0b07;
+  --bg-surface: #191208;
+  --bg-header: rgba(25, 18, 8, 0.8);
+  --text-core: #f5ede0;
+  --border-subtle: rgba(255, 255, 255, 0.04);
+}
