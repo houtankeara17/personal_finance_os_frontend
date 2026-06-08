@@ -224,7 +224,7 @@ function TextInput({ value, onChange, placeholder, type = "text", suffix }) {
 }
 
 export default function Setting() {
-  const { user, theme, updateProfileSettings } = useFinance();
+  const { user, theme, updateProfile } = useFinance();
   const navigate = useNavigate();
   const { toasts, add } = useToast();
   const [tab, setTab] = useState("profile");
@@ -286,7 +286,7 @@ export default function Setting() {
   const saveProfile = async () => {
     setSaving(true);
     try {
-      await updateProfileSettings({ name, avatar, currency, theme: selTheme });
+      await updateProfile({ name, avatar, currency, theme: selTheme });
       add({
         type: "success",
         title: "Profile saved",
@@ -302,7 +302,7 @@ export default function Setting() {
   const saveTheme = async () => {
     setSavingTheme(true);
     try {
-      await updateProfileSettings({ name, avatar, currency, theme: selTheme });
+      await updateProfile({ name, avatar, currency, theme: selTheme });
       add({
         type: "success",
         title: "Theme applied",
