@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useFinance } from "../../context/FinanceContext";
+import BASE_URL from "../../api/config";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft,

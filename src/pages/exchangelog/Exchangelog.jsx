@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useFinance } from "../../context/FinanceContext";
+import BASE_URL from "../../api/config";
 
 const CURRENCIES = ["USD", "KHR", "THB"];
 const PROVIDERS = [
@@ -118,7 +119,7 @@ export default function ExchangeLog() {
   // track which field the user last typed in so auto-fill knows which side to update
   const lastEdited = useRef("from"); // "from" | "to"
 
-  const BASE = "http://localhost:5000/api/exchangelog";
+  const BASE = `${BASE_URL}/api/exchangelog`;
 
   // ── Fetch ────────────────────────────────────────────────────────────────
   const fetchAll = async () => {

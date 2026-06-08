@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFinance } from "../../context/FinanceContext";
+import BASE_URL from "../../api/config";
 
-const API_URL = "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL || BASE_URL;
 
 export default function OAuthCallback() {
   const navigate = useNavigate();

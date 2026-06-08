@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useFinance } from "../../context/FinanceContext";
+import BASE_URL from "../../api/config";
 
 const CURRENCIES = ["USD", "KHR", "THB"];
 const MONTHS = [
@@ -75,7 +76,7 @@ export default function Savings() {
     (_, i) => MIN_YEAR + i,
   );
 
-  const BASE = "http://localhost:5000/api/savings";
+  const BASE = `${BASE_URL}/api/savings`;
 
   const fetchAll = async () => {
     setLoading(true);

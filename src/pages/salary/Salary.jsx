@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useFinance } from "../../context/FinanceContext";
+import BASE_URL from "../../api/config";
 
 // ─── Module-level constants (OUTSIDE component) ───────────────────────────────
 const MONTHS = [
@@ -46,7 +47,7 @@ const emptyForm = {
   noted: "",
 };
 
-const BASE = "http://localhost:5000/api/salaries";
+const BASE = `${BASE_URL}/api/salaries`;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Salary() {

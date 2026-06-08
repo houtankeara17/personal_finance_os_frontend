@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import BASE_URL from "../../api/config";
 import { useFinance } from "../../context/FinanceContext";
 import {
   Pin,
@@ -171,7 +172,7 @@ export default function Notes() {
           column: 0,
         }));
         try {
-          await fetch("http://localhost:5000/api/notes/reorder", {
+          await fetch(`${BASE_URL}/api/notes/reorder`, {
             method: "PATCH",
             headers: syncHeaders(),
             body: JSON.stringify(updates),
@@ -258,7 +259,7 @@ export default function Notes() {
       .map((text) => ({ text, checked: false }));
     setIsSubmitting(true);
     try {
-      const res = await fetch("http://localhost:5000/api/notes", {
+      const res = await fetch(`${BASE_URL}/api/notes`, {
         method: "POST",
         headers: syncHeaders(),
         body: JSON.stringify({
@@ -295,7 +296,7 @@ export default function Notes() {
       .map((text) => ({ text, checked: false }));
     setIsSubmitting(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/notes/${noteId}`, {
+      const res = await fetch(`${BASE_URL}/api/notes/${noteId}`, {
         method: "PUT",
         headers: syncHeaders(),
         body: JSON.stringify({
@@ -335,7 +336,7 @@ export default function Notes() {
   };
 
   const togglePin = async (item) => {
-    await fetch(`http://localhost:5000/api/notes/${item._id}`, {
+    await fetch(`${BASE_URL}/api/notes/${item._id}`, {
       method: "PUT",
       headers: syncHeaders(),
       body: JSON.stringify({ pinned: !item.pinned }),
@@ -344,7 +345,7 @@ export default function Notes() {
   };
 
   const handlePurge = async (id) => {
-    await fetch(`http://localhost:5000/api/notes/${id}`, {
+    await fetch(`${BASE_URL}/api/notes/${id}`, {
       method: "DELETE",
       headers: syncHeaders(),
     });
@@ -356,7 +357,7 @@ export default function Notes() {
     const updatedItems = note.items.map((it, i) =>
       i === idx ? { ...it, checked: !it.checked } : it,
     );
-    await fetch(`http://localhost:5000/api/notes/${note._id}`, {
+    await fetch(`${BASE_URL}/api/notes/${note._id}`, {
       method: "PUT",
       headers: syncHeaders(),
       body: JSON.stringify({ items: updatedItems }),

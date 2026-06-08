@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useFinance } from "../../context/FinanceContext";
+import BASE_URL from "../../api/config";
 
 const CURRENCIES = ["USD", "KHR", "THB"];
 const MONTHS = [
@@ -94,7 +95,7 @@ export default function Remittance() {
   const [navMonth, setNavMonth] = useState(today.getMonth() + 1);
   const [navYear, setNavYear] = useState(today.getFullYear());
 
-  const BASE = "http://localhost:5000/api/remittances";
+  const BASE = `${BASE_URL}/api/remittances`;
 
   const fetchAll = async () => {
     setLoading(true);

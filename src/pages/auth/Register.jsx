@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useFinance } from "../../context/FinanceContext";
 import SystemNotice from "../../components/SystemNotice";
+import BASE_URL from "../../api/config";
 
 export default function Register() {
   const { executeRegister } = useFinance();
@@ -36,7 +37,7 @@ export default function Register() {
   };
 
   const handleGoogleSignUp = () => {
-    window.location.href = "http://localhost:5000/api/auth/google";
+    window.location.href = `${BASE_URL}/api/auth/google`;
   };
 
   return (

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useFinance } from "../../context/FinanceContext";
 import SystemNotice from "../../components/SystemNotice";
+import BASE_URL from "../../api/config";
 
 export default function Login() {
   const { executeLogin, addNotice } = useFinance();
@@ -26,7 +27,7 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/api/auth/login", {
+      const res = await fetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -53,14 +54,11 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(
-        "http://localhost:5000/api/auth/forgot-password",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
-        },
-      ).then((r) => r.json());
+      const res = await fetch(`${BASE_URL}/api/auth/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      }).then((r) => r.json());
 
       if (res.success) {
         if (addNotice) {
@@ -82,7 +80,7 @@ export default function Login() {
     }
   };
   const handleGoogleLogin = () => {
-    window.location.href = "http://localhost:5000/api/auth/google";
+    window.location.href = `${BASE_URL}/api/auth/google`;
   };
 
   return (

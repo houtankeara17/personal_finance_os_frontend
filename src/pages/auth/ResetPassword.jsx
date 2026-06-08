@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useFinance } from "../../context/FinanceContext";
+import BASE_URL from "../../api/config";
 
 export default function ResetPassword() {
   const { addNotice } = useFinance();

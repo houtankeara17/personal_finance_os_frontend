@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useFinance } from "../../context/FinanceContext";
+import BASE_URL from "../../api/config";
 
 // ── Style maps ────────────────────────────────────────────────────────────────
 const CATEGORY_STYLE = {
@@ -756,7 +757,7 @@ export default function Expenses() {
   const handleCreate = async (data) => {
     setSubmitting(true);
     try {
-      const res = await fetch("http://localhost:5000/api/expenses", {
+      const res = await fetch(`${BASE_URL}/api/expenses`, {
         method: "POST",
         headers: { ...syncHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(data),

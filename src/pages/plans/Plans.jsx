@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useFinance } from "../../context/FinanceContext";
+import BASE_URL from "../../api/config";
 
 // ─── Module-level constants ───────────────────────────────────────────────────
 const CURRENCIES = ["USD", "KHR", "THB"];
@@ -58,7 +59,7 @@ const emptyForm = {
   noted: "",
 };
 
-const BASE = "http://localhost:5000/api/plans";
+const BASE = `${BASE_URL}/api/plans`;
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Plans() {

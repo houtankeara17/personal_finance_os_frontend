@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useFinance } from "../../context/FinanceContext";
+import BASE_URL from "../../api/config";
 
 // ─── Module-level constants (OUTSIDE component) ───────────────────────────────
 const MONTHS = [
@@ -53,8 +54,8 @@ const YEAR_OPTIONS = Array.from(
 const isFuture = (month, year) =>
   year > MAX_YEAR || (year === MAX_YEAR && month > MAX_MONTH);
 
-const BASE = "http://localhost:5000/api/bonuses";
-const SALARY_BASE = "http://localhost:5000/api/salaries";
+const BASE = `${BASE_URL}/api/bonuses`;
+const SALARY_BASE = `${BASE_URL}/api/salaries`;
 
 const emptyForm = (month, monthNumber, year) => ({
   amount: "",
