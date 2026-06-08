@@ -1,8 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import {
+  useSalary,
+  MAX_YEAR,
+  MAX_MONTH,
+  isFuture,
+} from "../../hooks/useSalary";
 import { useFinance } from "../../context/FinanceContext";
-import BASE_URL from "../../api/config";
 
-// ─── Module-level constants (OUTSIDE component) ───────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
 const MONTHS = [
   "January",
   "February",
@@ -25,97 +30,46 @@ const STATUS_STYLE = {
   Confirmed: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
   Disbursed: "bg-sky-500/10 text-sky-400 border border-sky-500/20",
 };
-
-const _now = new Date();
-const MAX_YEAR = _now.getFullYear();
-const MAX_MONTH = _now.getMonth() + 1;
 const YEAR_OPTIONS = Array.from(
   { length: MAX_YEAR - 2025 + 1 },
   (_, i) => 2025 + i,
 );
-const isFuture = (month, year) =>
-  year > MAX_YEAR || (year === MAX_YEAR && month > MAX_MONTH);
 
 const emptyForm = {
   amount: "",
   currency: "USD",
   year: MAX_YEAR,
-  month: MONTHS[_now.getMonth()],
+  month: MONTHS[MAX_MONTH - 1],
   monthNumber: MAX_MONTH,
   status: "Confirmed",
   image: "",
   noted: "",
 };
 
-const BASE = `${BASE_URL}/api/salaries`;
-
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Salary() {
-  const { syncHeaders, addNotice } = useFinance();
+  const { addNotice } = useFinance();
+  const {
+    curYear,
+    curMonth,
+    records,
+    loading,
+    submitting,
+    goMonth,
+    handleDateJump,
+    isCurrentMonth,
+    saveRecord,
+    deleteRecord,
+    stats,
+  } = useSalary();
 
-  const [curYear, setCurYear] = useState(MAX_YEAR);
-  const [curMonth, setCurMonth] = useState(MAX_MONTH);
-  const [records, setRecords] = useState([]);
-  const [salaryStats, setSalaryStats] = useState(null);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState(emptyForm);
-  const [submitting, setSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
 
-  // ── Fetch ────────────────────────────────────────────────────────────────
-  const fetchAll = async (year, month) => {
-    setLoading(true);
-    try {
-      const res = await fetch(`${BASE}?year=${year}&monthNumber=${month}`, {
-        headers: syncHeaders(),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setRecords(data.data);
-        setSalaryStats(data.stats ?? null);
-      } else {
-        addNotice(data.message || "Failed to load salary records.", "error");
-      }
-    } catch {
-      addNotice("Network error: Could not reach server.", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAll(curYear, curMonth);
-  }, [curYear, curMonth]);
-
-  // ── Month navigation ─────────────────────────────────────────────────────
-  const isCurrentMonth = curYear === MAX_YEAR && curMonth === MAX_MONTH;
-
-  const goMonth = (delta) => {
-    let m = curMonth + delta,
-      y = curYear;
-    if (m < 1) {
-      m = 12;
-      y--;
-    }
-    if (m > 12) {
-      m = 1;
-      y++;
-    }
-    if (isFuture(m, y)) return;
-    setCurMonth(m);
-    setCurYear(y);
-  };
-
-  const handleDateJump = (month, year) => {
-    if (isFuture(month, year)) return;
-    setCurMonth(month);
-    setCurYear(year);
-  };
-
-  // ── Modal helpers ────────────────────────────────────────────────────────
+  // ── Modal helpers ──────────────────────────────────────────────────────
   const openCreate = () => {
     setEditTarget(null);
     setForm(emptyForm);
@@ -160,78 +114,17 @@ export default function Salary() {
     setForm((f) => ({ ...f, month: monthName, monthNumber: idx + 1 }));
   };
 
-  // ── Submit ───────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!form.amount || isNaN(form.amount) || Number(form.amount) <= 0)
-      return addNotice("Enter a valid amount.", "error");
-
-    setSubmitting(true);
-    try {
-      const method = editTarget ? "PUT" : "POST";
-      const url = editTarget ? `${BASE}/${editTarget}` : BASE;
-      const num = Number(form.amount);
-      const amountUSD =
-        form.currency === "KHR"
-          ? num / 4000
-          : form.currency === "THB"
-            ? num / 35
-            : num;
-
-      const res = await fetch(url, {
-        method,
-        headers: syncHeaders(),
-        body: JSON.stringify({ ...form, amount: num, amountUSD }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        addNotice(
-          editTarget
-            ? "Salary record updated successfully."
-            : "Salary record added successfully.",
-          "success",
-        );
-        setShowModal(false);
-        fetchAll(curYear, curMonth);
-      } else {
-        addNotice(data.message || "Operation failed.", "error");
-      }
-    } catch {
-      addNotice("Server error: Failed to save record.", "error");
-    } finally {
-      setSubmitting(false);
-    }
+    const ok = await saveRecord(form, editTarget);
+    if (ok) setShowModal(false);
   };
 
-  // ── Delete ───────────────────────────────────────────────────────────────
   const handleDelete = async (id) => {
-    try {
-      const res = await fetch(`${BASE}/${id}`, {
-        method: "DELETE",
-        headers: syncHeaders(),
-      });
-      const data = await res.json();
-      if (data.success) {
-        addNotice("Record deleted permanently.", "success");
-        fetchAll(curYear, curMonth);
-      } else {
-        addNotice(data.message || "Delete failed.", "error");
-      }
-    } catch {
-      addNotice("Server error: Could not complete deletion.", "error");
-    } finally {
-      setDeleteId(null);
-    }
+    await deleteRecord(id);
+    setDeleteId(null);
   };
 
-  // ── Derived stats ────────────────────────────────────────────────────────
-  const totalUSD =
-    salaryStats?.totalEarned ??
-    records.reduce((s, r) => s + (r.amountUSD || 0), 0);
-  const disbursed = records.filter((r) => r.status === "Disbursed").length;
-  const confirmed = records.filter((r) => r.status === "Confirmed").length;
-  const thisYear = records.filter((r) => r.year === MAX_YEAR).length;
-
-  // ── Render ───────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 font-mono text-white">
       {/* Header */}
@@ -257,11 +150,11 @@ export default function Salary() {
         {[
           {
             label: "TOTAL INCOME (USD)",
-            value: `$${totalUSD.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+            value: `$${stats.totalUSD.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
           },
-          { label: "THIS YEAR", value: thisYear },
-          { label: "CONFIRMED", value: confirmed },
-          { label: "DISBURSED", value: disbursed },
+          { label: "THIS YEAR", value: stats.thisYear },
+          { label: "CONFIRMED", value: stats.confirmed },
+          { label: "DISBURSED", value: stats.disbursed },
         ].map((s) => (
           <div
             key={s.label}
@@ -283,7 +176,6 @@ export default function Salary() {
         >
           ← PREV
         </button>
-
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-1.5">
             <select
@@ -305,7 +197,6 @@ export default function Salary() {
                 );
               })}
             </select>
-
             <select
               value={curYear}
               onChange={(e) => {
@@ -325,14 +216,12 @@ export default function Salary() {
               ))}
             </select>
           </div>
-
           {isCurrentMonth && (
             <p className="text-[8px] tracking-widest text-white/25 mt-0.5">
               CURRENT MONTH
             </p>
           )}
         </div>
-
         <button
           onClick={() => goMonth(+1)}
           disabled={isCurrentMonth}
@@ -352,7 +241,6 @@ export default function Salary() {
           <span>STATUS</span>
           <span>ACTIONS</span>
         </div>
-
         {loading ? (
           <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
             LOADING RECORDS...

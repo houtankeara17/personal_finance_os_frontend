@@ -1,22 +1,15 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
+import {
+  useBonus,
+  MAX_YEAR,
+  MAX_MONTH,
+  MONTHS,
+  RATES,
+  isFuture,
+} from "../../hooks/useBonus";
 import { useFinance } from "../../context/FinanceContext";
-import BASE_URL from "../../api/config";
 
-// ─── Module-level constants (OUTSIDE component) ───────────────────────────────
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
+// ─── Constants ────────────────────────────────────────────────────────────────
 const CURRENCIES = ["USD", "KHR", "THB"];
 const STATUSES = ["Draft", "Confirmed", "Disbursed"];
 const TAGS = [
@@ -28,7 +21,10 @@ const TAGS = [
   "🎁 Other",
 ];
 const CURRENCY_SYMBOL = { USD: "$", KHR: "៛", THB: "฿" };
-const RATES = { USD: 1, KHR: 4000, THB: 35 };
+const YEAR_OPTIONS = Array.from(
+  { length: MAX_YEAR - 2025 + 1 },
+  (_, i) => 2025 + i,
+);
 
 const STATUS_STYLE = {
   Draft: "bg-white/[0.04] text-white/40 border border-white/[0.08]",
@@ -44,18 +40,11 @@ const TAG_STYLE = {
   "🎁 Other": "bg-white/[0.04]  text-white/40   border-white/[0.08]",
 };
 
-const _now = new Date();
-const MAX_YEAR = _now.getFullYear();
-const MAX_MONTH = _now.getMonth() + 1;
-const YEAR_OPTIONS = Array.from(
-  { length: MAX_YEAR - 2025 + 1 },
-  (_, i) => 2025 + i,
-);
-const isFuture = (month, year) =>
-  year > MAX_YEAR || (year === MAX_YEAR && month > MAX_MONTH);
-
-const BASE = `${BASE_URL}/api/bonuses`;
-const SALARY_BASE = `${BASE_URL}/api/salaries`;
+const fmtUSD = (n) =>
+  Number(n).toLocaleString(undefined, {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 
 const emptyForm = (month, monthNumber, year) => ({
   amount: "",
@@ -70,87 +59,29 @@ const emptyForm = (month, monthNumber, year) => ({
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function Bonus() {
-  const { syncHeaders, addNotice } = useFinance();
+  const { addNotice } = useFinance();
+  const {
+    curYear,
+    curMonth,
+    records,
+    monthlySalary,
+    loading,
+    submitting,
+    goMonth,
+    handleDateJump,
+    isCurrentMonth,
+    saveRecord,
+    deleteRecord,
+    stats,
+  } = useBonus();
 
-  const [curYear, setCurYear] = useState(MAX_YEAR);
-  const [curMonth, setCurMonth] = useState(MAX_MONTH);
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
   const [form, setForm] = useState(emptyForm());
-  const [submitting, setSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [filterTag, setFilterTag] = useState("ALL");
-  const [monthlySalary, setMonthlySalary] = useState(0);
 
-  // ── Fetch all bonuses ─────────────────────────────────────────────────────
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(BASE, { headers: syncHeaders() });
-      const data = await res.json();
-      if (data.success) setRecords(data.data);
-      else addNotice(data.message || "Failed to load bonus records.", "error");
-    } catch {
-      addNotice("Network error: Failed to reach bonus system.", "error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // ── Fetch salary for current month ───────────────────────────────────────
-  const fetchSalary = useCallback(async () => {
-    try {
-      const res = await fetch(
-        `${SALARY_BASE}?year=${curYear}&monthNumber=${curMonth}`,
-        { headers: syncHeaders() },
-      );
-      const data = await res.json();
-      if (data.success && data.data?.length > 0) {
-        const latest = data.data[0];
-        setMonthlySalary(latest.amountUSD ?? latest.amount ?? 0);
-      } else {
-        setMonthlySalary(0);
-      }
-    } catch {
-      setMonthlySalary(0);
-    }
-  }, [curYear, curMonth]);
-
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
-  useEffect(() => {
-    fetchSalary();
-  }, [fetchSalary]);
-
-  // ── Month navigation ──────────────────────────────────────────────────────
-  const isCurrentMonth = curYear === MAX_YEAR && curMonth === MAX_MONTH;
-
-  const goMonth = (delta) => {
-    let m = curMonth + delta,
-      y = curYear;
-    if (m < 1) {
-      m = 12;
-      y--;
-    }
-    if (m > 12) {
-      m = 1;
-      y++;
-    }
-    if (isFuture(m, y)) return;
-    setCurMonth(m);
-    setCurYear(y);
-  };
-
-  const handleDateJump = (month, year) => {
-    if (isFuture(month, year)) return;
-    setCurMonth(month);
-    setCurYear(year);
-  };
-
-  // ── Modal helpers ─────────────────────────────────────────────────────────
+  // ── Modal helpers ──────────────────────────────────────────────────────
   const openCreate = () => {
     setEditTarget(null);
     setForm(emptyForm(MONTHS[curMonth - 1], curMonth, curYear));
@@ -177,103 +108,30 @@ export default function Bonus() {
     setForm((f) => ({ ...f, month: monthName, monthNumber: idx + 1 }));
   };
 
-  // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!form.amount || isNaN(form.amount) || Number(form.amount) <= 0)
-      return addNotice("Enter a valid amount.", "error");
-
-    setSubmitting(true);
-    try {
-      const method = editTarget ? "PUT" : "POST";
-      const url = editTarget ? `${BASE}/${editTarget}` : BASE;
-      const numAmount = Number(form.amount);
-      const amountUSD = numAmount / RATES[form.currency];
-
-      const res = await fetch(url, {
-        method,
-        headers: syncHeaders(),
-        body: JSON.stringify({ ...form, amount: numAmount, amountUSD }),
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        addNotice(
-          editTarget
-            ? "Bonus record updated seamlessly."
-            : "Bonus record added successfully.",
-          "success",
-        );
-        setShowModal(false);
-        if (!isFuture(form.monthNumber, form.year)) {
-          setCurMonth(form.monthNumber);
-          setCurYear(form.year);
-        }
-        fetchAll();
-      } else {
-        addNotice(data.message || "Operation failed.", "error");
-      }
-    } catch {
-      addNotice("Server error: Failed to save bonus record.", "error");
-    } finally {
-      setSubmitting(false);
-    }
+    const ok = await saveRecord(form, editTarget);
+    if (ok) setShowModal(false);
   };
 
-  // ── Delete ────────────────────────────────────────────────────────────────
   const handleDelete = async (id) => {
-    try {
-      const res = await fetch(`${BASE}/${id}`, {
-        method: "DELETE",
-        headers: syncHeaders(),
-      });
-      const data = await res.json();
-      if (data.success) {
-        addNotice("Bonus record purged successfully.", "success");
-        fetchAll();
-      } else {
-        addNotice(data.message || "Delete failed.", "error");
-      }
-    } catch {
-      addNotice("Server error during deletion.", "error");
-    } finally {
-      setDeleteId(null);
-    }
+    await deleteRecord(id);
+    setDeleteId(null);
   };
 
-  // ── Derived stats ─────────────────────────────────────────────────────────
-  const totalUSD = records.reduce((s, r) => s + (r.amountUSD || 0), 0);
-  const disbursed = records.filter((r) => r.status === "Disbursed").length;
-  const thisYear = records.filter((r) => r.year === curYear);
-  const thisYearUSD = thisYear.reduce((s, r) => s + (r.amountUSD || 0), 0);
-  const monthRecords = records.filter(
-    (r) => r.year === curYear && r.monthNumber === curMonth,
-  );
-  const monthBonusUSD = monthRecords.reduce(
-    (s, r) => s + (r.amountUSD || 0),
-    0,
-  );
-  const totalComp = monthlySalary + monthBonusUSD;
-  const salaryRatio =
-    monthlySalary > 0
-      ? ((monthBonusUSD / monthlySalary) * 100).toFixed(1)
-      : null;
+  // ── Derived (view-only) ────────────────────────────────────────────────
+  const { monthRecords } = stats;
+  const monthLabel = `${MONTHS[curMonth - 1]} ${curYear}`;
   const visible =
     filterTag === "ALL"
       ? monthRecords
       : monthRecords.filter((r) => r.tag === filterTag);
-  const monthLabel = `${MONTHS[curMonth - 1]} ${curYear}`;
+
   const previewUSD =
     form.amount && !isNaN(form.amount) && Number(form.amount) > 0
       ? Number(form.amount) / RATES[form.currency]
       : null;
 
-  const fmtUSD = (n) =>
-    Number(n).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6 font-mono text-white">
       {/* Header */}
@@ -297,10 +155,13 @@ export default function Bonus() {
       {/* Global Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "TOTAL BONUSES (USD)", value: `$${fmtUSD(totalUSD)}` },
-          { label: `${curYear} TOTAL (USD)`, value: `$${fmtUSD(thisYearUSD)}` },
-          { label: `${curYear} COUNT`, value: thisYear.length },
-          { label: "DISBURSED", value: disbursed },
+          { label: "TOTAL BONUSES (USD)", value: `$${fmtUSD(stats.totalUSD)}` },
+          {
+            label: `${curYear} TOTAL (USD)`,
+            value: `$${fmtUSD(stats.thisYearUSD)}`,
+          },
+          { label: `${curYear} COUNT`, value: stats.thisYearCount },
+          { label: "DISBURSED", value: stats.disbursed },
         ].map((s) => (
           <div
             key={s.label}
@@ -345,7 +206,6 @@ export default function Bonus() {
                 );
               })}
             </select>
-
             <select
               value={curYear}
               onChange={(e) => {
@@ -365,7 +225,6 @@ export default function Bonus() {
               ))}
             </select>
           </div>
-
           <p className="text-[10px] text-white/25 mt-0.5">
             {monthRecords.length} bonus{monthRecords.length !== 1 ? "es" : ""}{" "}
             this month
@@ -387,7 +246,7 @@ export default function Bonus() {
         </button>
       </div>
 
-      {/* Month Summary Grid */}
+      {/* Month Summary */}
       {monthRecords.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
@@ -398,13 +257,15 @@ export default function Bonus() {
             },
             {
               label: "BONUS",
-              value: `$${fmtUSD(monthBonusUSD)}`,
-              sub: salaryRatio ? `${salaryRatio}% of salary` : undefined,
+              value: `$${fmtUSD(stats.monthBonusUSD)}`,
+              sub: stats.salaryRatio
+                ? `${stats.salaryRatio}% of salary`
+                : undefined,
               accent: "text-emerald-400",
             },
             {
               label: "TOTAL COMP",
-              value: `$${fmtUSD(totalComp)}`,
+              value: `$${fmtUSD(stats.totalComp)}`,
               sub: "salary + bonus",
               accent: "text-sky-400",
             },
@@ -550,6 +411,7 @@ export default function Bonus() {
               </button>
             </div>
 
+            {/* Read-only salary */}
             <div className="space-y-1">
               <label className="text-[9px] tracking-widest text-white/25">
                 MONTHLY SALARY (USD) — READ ONLY
@@ -566,6 +428,7 @@ export default function Bonus() {
               />
             </div>
 
+            {/* Amount + Currency */}
             <div className="flex gap-3">
               <div className="flex-1 space-y-1">
                 <label className="text-[9px] tracking-widest text-white/25">
@@ -599,6 +462,7 @@ export default function Bonus() {
               </div>
             </div>
 
+            {/* Live preview */}
             {previewUSD !== null && (
               <div className="grid grid-cols-3 gap-2 border border-white/[0.06] bg-white/[0.02] rounded-sm px-4 py-3">
                 <div>
@@ -628,6 +492,7 @@ export default function Bonus() {
               </div>
             )}
 
+            {/* Month + Year */}
             <div className="flex gap-3">
               <div className="flex-1 space-y-1">
                 <label className="text-[9px] tracking-widest text-white/25">
@@ -658,6 +523,7 @@ export default function Bonus() {
               </div>
             </div>
 
+            {/* Tag */}
             <div className="space-y-2">
               <label className="text-[9px] tracking-widest text-white/25">
                 BONUS TAG
@@ -676,6 +542,7 @@ export default function Bonus() {
               </div>
             </div>
 
+            {/* Status */}
             <div className="space-y-1">
               <label className="text-[9px] tracking-widest text-white/25">
                 STATUS
@@ -694,6 +561,7 @@ export default function Bonus() {
               </div>
             </div>
 
+            {/* Notes */}
             <div className="space-y-1">
               <label className="text-[9px] tracking-widest text-white/25">
                 NOTES

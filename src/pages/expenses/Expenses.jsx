@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
-import { useFinance } from "../../context/FinanceContext";
-import BASE_URL from "../../api/config";
+import React, { useState, useEffect, useRef } from "react";
+import { useExpenses } from "../../hooks/useExpenses";
 
 // ── Style maps ────────────────────────────────────────────────────────────────
 const CATEGORY_STYLE = {
@@ -99,7 +98,6 @@ function StyledSelect({ value, onChange, children, className = "" }) {
   );
 }
 
-// ── Tag badge ─────────────────────────────────────────────────────────────────
 function Tag({ style, children }) {
   return (
     <span
@@ -110,7 +108,6 @@ function Tag({ style, children }) {
   );
 }
 
-// ── Modal shell ───────────────────────────────────────────────────────────────
 function Modal({ onClose, children, title, subtitle }) {
   useEffect(() => {
     const esc = (e) => e.key === "Escape" && onClose();
@@ -143,13 +140,11 @@ function Modal({ onClose, children, title, subtitle }) {
   );
 }
 
-// ── Delete Confirm Dialog ─────────────────────────────────────────────────────
 function DeleteConfirmDialog({
   onConfirm,
   onCancel,
   message,
   confirmLabel = "DELETE",
-  danger = true,
 }) {
   return (
     <div
@@ -190,7 +185,6 @@ function DeleteConfirmDialog({
   );
 }
 
-// ── Expense Form (shared for create + edit) ───────────────────────────────────
 function ExpenseForm({ initial, onSubmit, onCancel, submitting }) {
   const now = new Date();
   const [amount, setAmount] = useState(initial?.amount?.toString() || "");
@@ -411,7 +405,6 @@ function ExpenseForm({ initial, onSubmit, onCancel, submitting }) {
   );
 }
 
-// ── Calendar Day Popup ────────────────────────────────────────────────────────
 function DayPopup({
   day,
   month,
@@ -422,17 +415,10 @@ function DayPopup({
   onDelete,
   deletingId,
 }) {
-  const [confirmDelete, setConfirmDelete] = useState(null); // expense id to confirm
-
+  const [confirmDelete, setConfirmDelete] = useState(null);
   const dayExpenses = expenses.filter((e) => e.day === day);
   const total = dayExpenses.reduce((s, e) => s + (e.amountUSD || 0), 0);
   const dateLabel = `${MONTH_NAMES[month - 1]} ${day}, ${year}`;
-
-  const handleDeleteClick = (id) => setConfirmDelete(id);
-  const handleConfirmDelete = () => {
-    onDelete(confirmDelete);
-    setConfirmDelete(null);
-  };
 
   return (
     <>
@@ -542,7 +528,7 @@ function DayPopup({
                         EDIT
                       </button>
                       <button
-                        onClick={() => handleDeleteClick(exp._id)}
+                        onClick={() => setConfirmDelete(exp._id)}
                         disabled={deletingId === exp._id}
                         className="px-2.5 py-1 text-[9px] tracking-widest text-red-400/50 hover:text-red-300 border border-red-500/15 hover:border-red-500/35 rounded transition-colors disabled:opacity-30"
                       >
@@ -566,12 +552,13 @@ function DayPopup({
           )}
         </div>
       </div>
-
-      {/* Confirm delete overlay (above popup) */}
       {confirmDelete && (
         <DeleteConfirmDialog
-          message={`Delete this expense? This cannot be undone.`}
-          onConfirm={handleConfirmDelete}
+          message="Delete this expense? This cannot be undone."
+          onConfirm={() => {
+            onDelete(confirmDelete);
+            setConfirmDelete(null);
+          }}
           onCancel={() => setConfirmDelete(null)}
         />
       )}
@@ -581,16 +568,24 @@ function DayPopup({
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function Expenses() {
-  const { syncHeaders, addNotice } = useFinance();
-
   const now = new Date();
-  const [curYear, setCurYear] = useState(now.getFullYear());
-  const [curMonth, setCurMonth] = useState(now.getMonth() + 1);
 
-  const [expenses, setExpenses] = useState([]);
-  const [calendarMap, setCalendarMap] = useState({});
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const {
+    curYear,
+    curMonth,
+    goMonth,
+    jumpToMonth,
+    expenses,
+    calendarMap,
+    stats,
+    loading,
+    submitting,
+    deletingId,
+    handleCreate,
+    handleUpdate,
+    handleDelete,
+    handleDeleteMany,
+  } = useExpenses(now.getFullYear(), now.getMonth() + 1);
 
   const [view, setView] = useState("table");
   const [timeRange, setTimeRange] = useState("month");
@@ -598,104 +593,48 @@ export default function Expenses() {
   const [filterPay, setFilterPay] = useState("ALL");
   const [sortBy, setSortBy] = useState("date-desc");
   const [search, setSearch] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
-  // ── Date range filter state ───────────────────────────────────────────────
-  const [dateFrom, setDateFrom] = useState(""); // "YYYY-MM-DD"
-  const [dateTo, setDateTo] = useState(""); // "YYYY-MM-DD"
-
-  // Calendar day popup
   const [dayPopup, setDayPopup] = useState(null);
-
-  // Log / Edit modal
   const [modal, setModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
 
-  // Delete confirmation state
-  const [deletingId, setDeletingId] = useState(null);
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null); // single item confirm
-  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false); // delete-all confirm step 1
-  const [confirmDeleteAllFinal, setConfirmDeleteAllFinal] = useState(false); // step 2
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
+  const [confirmDeleteAllFinal, setConfirmDeleteAllFinal] = useState(false);
 
   const currentYear = now.getFullYear();
   const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => currentYear - i);
-
-  // ── Fetch ─────────────────────────────────────────────────────────────────
-  const fetchMonth = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [expRes, calRes] = await Promise.all([
-        fetch(
-          `http://localhost:5000/api/expenses?year=${curYear}&monthNumber=${curMonth}&limit=200`,
-          { headers: syncHeaders() },
-        ).then((r) => r.json()),
-        fetch(
-          `http://localhost:5000/api/expenses/analytics/calendar?year=${curYear}&monthNumber=${curMonth}`,
-          { headers: syncHeaders() },
-        ).then((r) => r.json()),
-      ]);
-      if (expRes.success) {
-        setExpenses(expRes.data || []);
-        setStats(expRes.stats || null);
-      } else {
-        setExpenses([]);
-        setStats(null);
-      }
-      if (calRes.success) {
-        const map = {};
-        (calRes.data || []).forEach((d) => {
-          map[d.day] = d;
-        });
-        setCalendarMap(map);
-      } else setCalendarMap({});
-    } catch {
-      setExpenses([]);
-      setCalendarMap({});
-      setStats(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [curYear, curMonth, syncHeaders]);
-
-  useEffect(() => {
-    fetchMonth();
-  }, [fetchMonth]);
-
-  // ── Month nav ─────────────────────────────────────────────────────────────
-  const goMonth = (delta) => {
-    let m = curMonth + delta,
-      y = curYear;
-    if (m < 1) {
-      m = 12;
-      y--;
-    }
-    if (m > 12) {
-      m = 1;
-      y++;
-    }
-    setCurMonth(m);
-    setCurYear(y);
-    setFilterCat("ALL");
-    setFilterPay("ALL");
-    setSearch("");
-    setDateFrom("");
-    setDateTo("");
-  };
-
-  const handleDateJump = (month, year) => {
-    setCurMonth(month);
-    setCurYear(year);
-    setFilterCat("ALL");
-    setFilterPay("ALL");
-    setSearch("");
-    setDateFrom("");
-    setDateTo("");
-  };
-
   const isCurrentMonth =
     curYear === now.getFullYear() && curMonth === now.getMonth() + 1;
 
-  // ── Derived filtered + sorted list ───────────────────────────────────────
+  const clearDateRange = () => {
+    setDateFrom("");
+    setDateTo("");
+  };
+
+  const resetFilters = () => {
+    setFilterCat("ALL");
+    setFilterPay("ALL");
+    setSearch("");
+    setTimeRange("month");
+    clearDateRange();
+  };
+
+  const navigateMonth = (delta) => {
+    goMonth(delta);
+    resetFilters();
+  };
+
+  const handleDateJump = (month, year) => {
+    jumpToMonth(month, year);
+    resetFilters();
+  };
+
+  // ── Filtering + sorting ───────────────────────────────────────────────────
+  const hasDateRangeFilter = !!(dateFrom || dateTo);
+
   let filtered = expenses.filter((e) => {
     if (filterCat !== "ALL" && e.category !== filterCat) return false;
     if (filterPay !== "ALL" && e.paymentMethod !== filterPay) return false;
@@ -710,24 +649,18 @@ export default function Expenses() {
       )
         return false;
     }
-    // Custom date range filter
     if (dateFrom || dateTo) {
       const expDate = new Date(curYear, curMonth - 1, e.day);
-      if (dateFrom) {
-        const from = new Date(dateFrom);
-        if (expDate < from) return false;
-      }
+      if (dateFrom && expDate < new Date(dateFrom)) return false;
       if (dateTo) {
         const to = new Date(dateTo);
         to.setHours(23, 59, 59);
         if (expDate > to) return false;
       }
     } else if (timeRange === "week") {
-      // week filter only applies when no custom date range is set
       const d = new Date(curYear, curMonth - 1, e.day);
-      const today = now;
-      const weekStart = new Date(today);
-      weekStart.setDate(today.getDate() - today.getDay());
+      const weekStart = new Date(now);
+      weekStart.setDate(now.getDate() - now.getDay());
       const weekEnd = new Date(weekStart);
       weekEnd.setDate(weekStart.getDate() + 6);
       if (d < weekStart || d > weekEnd) return false;
@@ -745,7 +678,6 @@ export default function Expenses() {
   });
 
   const filteredTotal = filtered.reduce((s, e) => s + (e.amountUSD || 0), 0);
-  const hasDateRangeFilter = !!(dateFrom || dateTo);
   const hasAnyFilter =
     filterCat !== "ALL" ||
     filterPay !== "ALL" ||
@@ -753,81 +685,20 @@ export default function Expenses() {
     timeRange !== "month" ||
     hasDateRangeFilter;
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
-  const handleCreate = async (data) => {
-    setSubmitting(true);
-    try {
-      const res = await fetch(`${BASE_URL}/api/expenses`, {
-        method: "POST",
-        headers: { ...syncHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-      }).then((r) => r.json());
-      if (res.success) {
-        addNotice("Expense logged.");
-        setModal(false);
-        fetchMonth();
-      } else addNotice(res.message || "Failed to log expense.");
-    } finally {
-      setSubmitting(false);
+  // ── Handlers ──────────────────────────────────────────────────────────────
+  const onCreateSubmit = async (data) => {
+    const res = await handleCreate(data);
+    if (res.success) {
+      setModal(false);
     }
   };
 
-  const handleUpdate = async (data) => {
-    setSubmitting(true);
-    try {
-      const res = await fetch(
-        `http://localhost:5000/api/expenses/${editTarget._id}`,
-        {
-          method: "PUT",
-          headers: { ...syncHeaders(), "Content-Type": "application/json" },
-          body: JSON.stringify(data),
-        },
-      ).then((r) => r.json());
-      if (res.success) {
-        addNotice("Expense updated.");
-        setModal(false);
-        setEditTarget(null);
-        fetchMonth();
-      } else addNotice(res.message || "Failed to update.");
-    } finally {
-      setSubmitting(false);
+  const onUpdateSubmit = async (data) => {
+    const res = await handleUpdate(editTarget._id, data);
+    if (res.success) {
+      setModal(false);
+      setEditTarget(null);
     }
-  };
-
-  // Single delete — after confirmation
-  const handleDelete = async (id) => {
-    setDeletingId(id);
-    try {
-      await fetch(`http://localhost:5000/api/expenses/${id}`, {
-        method: "DELETE",
-        headers: syncHeaders(),
-      });
-      addNotice("Expense removed.");
-      fetchMonth();
-    } finally {
-      setDeletingId(null);
-    }
-  };
-
-  const requestDelete = (id) => setConfirmDeleteId(id);
-  const confirmSingleDelete = () => {
-    handleDelete(confirmDeleteId);
-    setConfirmDeleteId(null);
-  };
-
-  // Delete all on page (filtered) — two-step
-  const handleDeleteAll = async () => {
-    setConfirmDeleteAll(false);
-    setConfirmDeleteAllFinal(false);
-    const ids = filtered.map((e) => e._id);
-    for (const id of ids) {
-      await fetch(`http://localhost:5000/api/expenses/${id}`, {
-        method: "DELETE",
-        headers: syncHeaders(),
-      });
-    }
-    addNotice(`${ids.length} expense${ids.length !== 1 ? "s" : ""} deleted.`);
-    fetchMonth();
   };
 
   const openEdit = (exp) => {
@@ -840,12 +711,18 @@ export default function Expenses() {
     setEditTarget(null);
   };
 
-  const clearDateRange = () => {
-    setDateFrom("");
-    setDateTo("");
+  const confirmSingleDelete = () => {
+    handleDelete(confirmDeleteId);
+    setConfirmDeleteId(null);
   };
 
-  // ── Calendar grid ─────────────────────────────────────────────────────────
+  const handleDeleteAll = () => {
+    setConfirmDeleteAll(false);
+    setConfirmDeleteAllFinal(false);
+    handleDeleteMany(filtered.map((e) => e._id));
+  };
+
+  // ── Calendar ──────────────────────────────────────────────────────────────
   const totalDays = daysInMonth(curYear, curMonth);
   const startDay = firstDayOfMonth(curYear, curMonth);
   const maxTotal = Math.max(
@@ -853,7 +730,6 @@ export default function Expenses() {
     1,
   );
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4 font-mono min-h-screen">
       {/* ── Page header ── */}
@@ -892,7 +768,6 @@ export default function Expenses() {
           )}
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Delete all button — only shown when there are filtered results */}
           {filtered.length > 0 && (
             <button
               onClick={() => setConfirmDeleteAll(true)}
@@ -916,7 +791,7 @@ export default function Expenses() {
       {/* ── Month navigation ── */}
       <div className="flex items-center justify-between border border-white/[0.06] rounded-lg px-4 py-2.5 bg-white/[0.01]">
         <button
-          onClick={() => goMonth(-1)}
+          onClick={() => navigateMonth(-1)}
           className="text-[10px] tracking-widest text-white/30 hover:text-white/70 transition-colors px-2 py-1 rounded"
         >
           ← PREV
@@ -957,7 +832,7 @@ export default function Expenses() {
           )}
         </div>
         <button
-          onClick={() => goMonth(+1)}
+          onClick={() => navigateMonth(+1)}
           disabled={isCurrentMonth}
           className="text-[10px] tracking-widest text-white/30 hover:text-white/70 transition-colors px-2 py-1 rounded disabled:opacity-20 disabled:cursor-not-allowed"
         >
@@ -1008,10 +883,9 @@ export default function Expenses() {
         </div>
       )}
 
-      {/* ── Filter & Controls bar ── */}
+      {/* ── Filter & Controls ── */}
       {expenses.length > 0 && (
         <div className="space-y-2.5">
-          {/* Search */}
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/20 text-[11px]">
               ⌕
@@ -1032,7 +906,6 @@ export default function Expenses() {
             )}
           </div>
 
-          {/* ── Date range filter ── */}
           <div className="flex flex-wrap items-center gap-2 border border-white/[0.06] rounded-lg px-3 py-2.5 bg-white/[0.01]">
             <span className="text-[8px] tracking-widest text-white/25 shrink-0">
               DATE RANGE
@@ -1089,7 +962,6 @@ export default function Expenses() {
             </div>
           </div>
 
-          {/* Filter row */}
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="text-[8px] tracking-widest text-white/20 shrink-0">
@@ -1140,7 +1012,6 @@ export default function Expenses() {
                 <option value="amount-asc">Amount (low)</option>
               </StyledSelect>
             </div>
-            {/* Time range — disabled when custom date range is active */}
             <div className="flex items-center gap-1 ml-auto flex-wrap">
               {["week", "month", "year"].map((r) => (
                 <button
@@ -1150,11 +1021,7 @@ export default function Expenses() {
                     clearDateRange();
                   }}
                   disabled={hasDateRangeFilter && r !== "month"}
-                  className={`px-2.5 py-1 text-[8px] tracking-widest rounded border transition-colors ${
-                    timeRange === r && !hasDateRangeFilter
-                      ? "bg-white/[0.08] border-white/20 text-white/70"
-                      : "border-white/[0.06] text-white/25 hover:text-white/50 disabled:opacity-30"
-                  }`}
+                  className={`px-2.5 py-1 text-[8px] tracking-widest rounded border transition-colors ${timeRange === r && !hasDateRangeFilter ? "bg-white/[0.08] border-white/20 text-white/70" : "border-white/[0.06] text-white/25 hover:text-white/50 disabled:opacity-30"}`}
                 >
                   {r.toUpperCase()}
                 </button>
@@ -1165,11 +1032,7 @@ export default function Expenses() {
                 <button
                   key={v}
                   onClick={() => setView(v)}
-                  className={`px-2.5 py-1 text-[8px] tracking-widest rounded border transition-colors ${
-                    view === v
-                      ? "bg-white/[0.08] border-white/20 text-white/70"
-                      : "border-white/[0.06] text-white/25 hover:text-white/50"
-                  }`}
+                  className={`px-2.5 py-1 text-[8px] tracking-widest rounded border transition-colors ${view === v ? "bg-white/[0.08] border-white/20 text-white/70" : "border-white/[0.06] text-white/25 hover:text-white/50"}`}
                 >
                   {v === "table" ? "≡ TABLE" : "▦ CAL"}
                 </button>
@@ -1177,7 +1040,6 @@ export default function Expenses() {
             </div>
           </div>
 
-          {/* Active filters */}
           {hasAnyFilter && (
             <div className="flex flex-wrap gap-1.5 items-center">
               <span className="text-[8px] tracking-widest text-white/20">
@@ -1219,13 +1081,7 @@ export default function Expenses() {
                 </button>
               )}
               <button
-                onClick={() => {
-                  setFilterCat("ALL");
-                  setFilterPay("ALL");
-                  setSearch("");
-                  setTimeRange("month");
-                  clearDateRange();
-                }}
+                onClick={resetFilters}
                 className="text-[8px] tracking-widest text-white/20 hover:text-white/50 transition-colors ml-1"
               >
                 CLEAR ALL
@@ -1235,14 +1091,12 @@ export default function Expenses() {
         </div>
       )}
 
-      {/* ── Loading ── */}
       {loading && (
         <div className="py-16 text-center text-[10px] tracking-widest text-white/20 animate-pulse">
           LOADING…
         </div>
       )}
 
-      {/* ── Empty ── */}
       {!loading && expenses.length === 0 && (
         <div className="border border-white/[0.06] rounded-xl py-14 flex flex-col items-center gap-3">
           <p className="text-[11px] tracking-[0.25em] text-white/20">
@@ -1253,17 +1107,16 @@ export default function Expenses() {
           </p>
           <div className="flex gap-3 mt-2 flex-wrap justify-center">
             <button
-              onClick={() => goMonth(-1)}
+              onClick={() => navigateMonth(-1)}
               className="text-[9px] tracking-widest text-white/25 hover:text-white/60 border border-white/[0.06] rounded-lg px-3 py-1.5 transition-colors"
             >
               ← EARLIER MONTH
             </button>
             {!isCurrentMonth && (
               <button
-                onClick={() => {
-                  setCurYear(now.getFullYear());
-                  setCurMonth(now.getMonth() + 1);
-                }}
+                onClick={() =>
+                  handleDateJump(now.getMonth() + 1, now.getFullYear())
+                }
                 className="text-[9px] tracking-widest text-white/25 hover:text-white/60 border border-white/[0.06] rounded-lg px-3 py-1.5 transition-colors"
               >
                 → THIS MONTH
@@ -1298,23 +1151,16 @@ export default function Expenses() {
               const data = calendarMap[day];
               const heat = data ? data.total / maxTotal : 0;
               const isToday = isCurrentMonth && day === now.getDate();
-              const hasData = !!data;
-
-              // Highlight days within custom date range
               const dayDate = new Date(curYear, curMonth - 1, day);
               const inRange =
                 hasDateRangeFilter &&
                 (!dateFrom || dayDate >= new Date(dateFrom)) &&
                 (!dateTo || dayDate <= new Date(dateTo + "T23:59:59"));
-
               return (
                 <div
                   key={day}
-                  onClick={() => hasData && setDayPopup(day)}
-                  className={`min-h-[56px] sm:min-h-[72px] border-r border-b border-white/[0.04] p-1 sm:p-1.5 relative transition-colors
-                    ${hasData ? "cursor-pointer hover:bg-white/[0.04]" : ""}
-                    ${inRange ? "ring-inset ring-1 ring-emerald-500/20" : ""}
-                  `}
+                  onClick={() => data && setDayPopup(day)}
+                  className={`min-h-[56px] sm:min-h-[72px] border-r border-b border-white/[0.04] p-1 sm:p-1.5 relative transition-colors ${data ? "cursor-pointer hover:bg-white/[0.04]" : ""} ${inRange ? "ring-inset ring-1 ring-emerald-500/20" : ""}`}
                   style={
                     data
                       ? { backgroundColor: `rgba(251,146,60,${heat * 0.2})` }
@@ -1343,7 +1189,7 @@ export default function Expenses() {
                       </p>
                     </div>
                   )}
-                  {hasData && (
+                  {data && (
                     <div className="absolute bottom-1 right-1 w-1 h-1 rounded-full bg-orange-400/50 hidden sm:block" />
                   )}
                 </div>
@@ -1373,7 +1219,6 @@ export default function Expenses() {
             <span>NOTE / RECEIPT</span>
             <span className="text-right">ACTIONS</span>
           </div>
-
           {filtered.length === 0 ? (
             <div className="py-10 text-center text-[10px] tracking-widest text-white/20">
               NO ENTRIES MATCH FILTERS
@@ -1384,7 +1229,7 @@ export default function Expenses() {
                 key={exp._id}
                 className={`border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors ${i % 2 === 0 ? "" : "bg-white/[0.01]"}`}
               >
-                {/* Desktop row */}
+                {/* Desktop */}
                 <div className="hidden sm:grid grid-cols-[72px_1fr_1fr_80px_1fr_1fr_88px] items-center px-4 py-3 text-[11px]">
                   <span className="text-white/25 text-[10px]">
                     {MONTH_NAMES[curMonth - 1].slice(0, 3).toUpperCase()}{" "}
@@ -1439,7 +1284,7 @@ export default function Expenses() {
                       EDIT
                     </button>
                     <button
-                      onClick={() => requestDelete(exp._id)}
+                      onClick={() => setConfirmDeleteId(exp._id)}
                       disabled={deletingId === exp._id}
                       className="text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors disabled:opacity-30"
                     >
@@ -1447,8 +1292,7 @@ export default function Expenses() {
                     </button>
                   </div>
                 </div>
-
-                {/* Mobile row */}
+                {/* Mobile */}
                 <div className="sm:hidden px-4 py-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -1473,7 +1317,7 @@ export default function Expenses() {
                         EDIT
                       </button>
                       <button
-                        onClick={() => requestDelete(exp._id)}
+                        onClick={() => setConfirmDeleteId(exp._id)}
                         disabled={deletingId === exp._id}
                         className="text-[9px] text-red-500/40 hover:text-red-400 transition-colors disabled:opacity-30"
                       >
@@ -1514,7 +1358,6 @@ export default function Expenses() {
               </div>
             ))
           )}
-
           {filtered.length > 0 && (
             <div className="px-4 py-2.5 border-t border-white/[0.06] bg-white/[0.02] flex items-center justify-between flex-wrap gap-2">
               <span className="text-[9px] tracking-widest text-white/20">
@@ -1528,7 +1371,7 @@ export default function Expenses() {
         </div>
       )}
 
-      {/* ── Log / Edit Modal ── */}
+      {/* ── Modals ── */}
       {modal && (
         <Modal
           onClose={closeModal}
@@ -1537,14 +1380,13 @@ export default function Expenses() {
         >
           <ExpenseForm
             initial={editTarget}
-            onSubmit={editTarget ? handleUpdate : handleCreate}
+            onSubmit={editTarget ? onUpdateSubmit : onCreateSubmit}
             onCancel={closeModal}
             submitting={submitting}
           />
         </Modal>
       )}
 
-      {/* ── Calendar Day Popup ── */}
       {dayPopup !== null && (
         <DayPopup
           day={dayPopup}
@@ -1558,7 +1400,6 @@ export default function Expenses() {
         />
       )}
 
-      {/* ── Single delete confirm ── */}
       {confirmDeleteId && (
         <DeleteConfirmDialog
           message="Are you sure you want to delete this expense? It will be permanently removed."
@@ -1567,7 +1408,6 @@ export default function Expenses() {
         />
       )}
 
-      {/* ── Delete All — Step 1 ── */}
       {confirmDeleteAll && !confirmDeleteAllFinal && (
         <DeleteConfirmDialog
           message={`You are about to delete ${filtered.length} expense${filtered.length !== 1 ? "s" : ""} (${hasAnyFilter ? "current filtered view" : "entire month"}). Are you sure?`}
@@ -1580,7 +1420,6 @@ export default function Expenses() {
         />
       )}
 
-      {/* ── Delete All — Step 2 (final) ── */}
       {confirmDeleteAllFinal && (
         <DeleteConfirmDialog
           message={`Final confirmation: permanently delete ${filtered.length} expense${filtered.length !== 1 ? "s" : ""}? There is no undo.`}

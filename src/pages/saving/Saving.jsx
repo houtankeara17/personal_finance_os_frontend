@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { useFinance } from "../../context/FinanceContext";
-import BASE_URL from "../../api/config";
+import React from "react";
+import { useSavings } from "../../hooks/useSavings";
 
 const CURRENCIES = ["USD", "KHR", "THB"];
 const MONTHS = [
@@ -43,174 +42,38 @@ const CATEGORY_ICON = {
   Other: "📦",
 };
 
-const today = new Date();
-const emptyForm = {
-  amount: "",
-  currency: "USD",
-  category: "General Savings",
-  year: today.getFullYear(),
-  monthNumber: today.getMonth() + 1,
-  noted: "",
-};
-
 export default function Savings() {
-  const { syncHeaders, addNotice } = useFinance();
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editTarget, setEditTarget] = useState(null);
-  const [form, setForm] = useState(emptyForm);
-  const [submitting, setSubmitting] = useState(false);
-  const [deleteId, setDeleteId] = useState(null);
-  const [filterCat, setFilterCat] = useState("ALL");
-
-  // ── Month/Year navigator state ──
-  const [navYear, setNavYear] = useState(today.getFullYear());
-  const [navMonth, setNavMonth] = useState(today.getMonth() + 1); // 1-based
-
-  const MAX_MONTH = today.getMonth() + 1;
-  const MAX_YEAR = today.getFullYear();
-  const MIN_YEAR = 2025;
-  const YEAR_OPTIONS = Array.from(
-    { length: MAX_YEAR - MIN_YEAR + 1 },
-    (_, i) => MIN_YEAR + i,
-  );
-
-  const BASE = `${BASE_URL}/api/savings`;
-
-  const fetchAll = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(BASE, { headers: syncHeaders() });
-      const data = await res.json();
-      if (data.success) setRecords(data.data);
-    } catch {
-      addNotice("Failed to load savings records.", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAll();
-  }, []);
-
-  // ── Navigator helpers ──
-  const isCurrentMonth = navYear === MAX_YEAR && navMonth === MAX_MONTH;
-
-  const isFuture = (month, year) =>
-    year > MAX_YEAR || (year === MAX_YEAR && month > MAX_MONTH);
-
-  const goMonth = (dir) => {
-    let m = navMonth + dir;
-    let y = navYear;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    }
-    if (m < 1) {
-      m = 12;
-      y -= 1;
-    }
-    if (isFuture(m, y) || y < MIN_YEAR) return;
-    setNavMonth(m);
-    setNavYear(y);
-  };
-
-  const handleDateJump = (month, year) => {
-    if (!isFuture(month, year) && year >= MIN_YEAR) {
-      setNavMonth(month);
-      setNavYear(year);
-    }
-  };
-
-  // ── Modal ──
-  const openCreate = () => {
-    setEditTarget(null);
-    setForm(emptyForm);
-    setShowModal(true);
-  };
-
-  const openEdit = (rec) => {
-    setEditTarget(rec._id);
-    setForm({
-      amount: rec.amount,
-      currency: rec.currency,
-      category: rec.category,
-      year: rec.year,
-      monthNumber: rec.monthNumber,
-      noted: rec.noted || "",
-    });
-    setShowModal(true);
-  };
-
-  const handleSubmit = async () => {
-    if (!form.amount || isNaN(form.amount) || Number(form.amount) <= 0)
-      return addNotice("Enter a valid amount.", "error");
-    setSubmitting(true);
-    try {
-      const method = editTarget ? "PUT" : "POST";
-      const url = editTarget ? `${BASE}/${editTarget}` : BASE;
-      const res = await fetch(url, {
-        method,
-        headers: syncHeaders(),
-        body: JSON.stringify({ ...form, amount: Number(form.amount) }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        addNotice(
-          editTarget ? "Saving record updated." : "Saving record added.",
-        );
-        setShowModal(false);
-        fetchAll();
-      } else addNotice(data.message || "Operation failed.", "error");
-    } catch {
-      addNotice("Server error.", "error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    try {
-      const res = await fetch(`${BASE}/${id}`, {
-        method: "DELETE",
-        headers: syncHeaders(),
-      });
-      const data = await res.json();
-      if (data.success) {
-        addNotice("Record deleted.");
-        fetchAll();
-      } else addNotice(data.message || "Delete failed.", "error");
-    } catch {
-      addNotice("Server error.", "error");
-    } finally {
-      setDeleteId(null);
-    }
-  };
-
-  // ── Stats (all records) ──
-  const totalUSD = records.reduce((s, r) => s + (r.amountUSD || 0), 0);
-  const thisMonthRecords = records.filter(
-    (r) =>
-      r.monthNumber === today.getMonth() + 1 && r.year === today.getFullYear(),
-  );
-  const thisMonthUSD = thisMonthRecords.reduce(
-    (s, r) => s + (r.amountUSD || 0),
-    0,
-  );
-  const thisYearUSD = records
-    .filter((r) => r.year === today.getFullYear())
-    .reduce((s, r) => s + (r.amountUSD || 0), 0);
-
-  // ── Filtered by nav month/year + category ──
-  const navFiltered = records.filter(
-    (r) => r.monthNumber === navMonth && r.year === navYear,
-  );
-  const visible =
-    filterCat === "ALL"
-      ? navFiltered
-      : navFiltered.filter((r) => r.category === filterCat);
+  const {
+    loading,
+    visible,
+    navFiltered,
+    navMonthUSD,
+    totalUSD,
+    thisMonthUSD,
+    thisMonthRecords,
+    thisYearUSD,
+    navMonth,
+    navYear,
+    YEAR_OPTIONS,
+    isCurrentMonth,
+    isFuture,
+    goMonth,
+    handleDateJump,
+    filterCat,
+    setFilterCat,
+    showModal,
+    editTarget,
+    form,
+    setForm,
+    submitting,
+    openCreate,
+    openEdit,
+    closeModal,
+    handleSubmit,
+    deleteId,
+    setDeleteId,
+    handleDelete,
+  } = useSavings();
 
   // Category breakdown (nav month only)
   const categoryTotals = CATEGORIES.map((cat) => {
@@ -221,8 +84,6 @@ export default function Savings() {
       count: items.length,
     };
   }).filter((c) => c.count > 0);
-
-  const navMonthUSD = navFiltered.reduce((s, r) => s + (r.amountUSD || 0), 0);
 
   return (
     <div className="space-y-6 font-mono">
@@ -310,8 +171,9 @@ export default function Savings() {
               onChange={(e) => {
                 const newYear = Number(e.target.value);
                 const clampedMonth =
-                  newYear === MAX_YEAR && navMonth > MAX_MONTH
-                    ? MAX_MONTH
+                  newYear === new Date().getFullYear() &&
+                  navMonth > new Date().getMonth() + 1
+                    ? new Date().getMonth() + 1
                     : navMonth;
                 handleDateJump(clampedMonth, newYear);
               }}
@@ -356,12 +218,12 @@ export default function Savings() {
           {categoryTotals.map(({ cat, total, count }) => (
             <div
               key={cat}
+              onClick={() => setFilterCat(filterCat === cat ? "ALL" : cat)}
               className={`border rounded-sm p-3 flex items-center gap-3 cursor-pointer transition-all ${
                 filterCat === cat
-                  ? `${CATEGORY_STYLE[cat]}`
+                  ? CATEGORY_STYLE[cat]
                   : "border-white/[0.05] bg-white/[0.015] hover:bg-white/[0.03]"
               }`}
-              onClick={() => setFilterCat(filterCat === cat ? "ALL" : cat)}
             >
               <span className="text-lg">{CATEGORY_ICON[cat]}</span>
               <div className="min-w-0">
@@ -476,7 +338,7 @@ export default function Savings() {
                 {editTarget ? "Edit Saving Record" : "New Saving Record"}
               </p>
               <button
-                onClick={() => setShowModal(false)}
+                onClick={closeModal}
                 className="text-white/20 hover:text-white/60 text-lg leading-none"
               >
                 ×
@@ -592,7 +454,7 @@ export default function Savings() {
 
             <div className="flex gap-3 pt-1">
               <button
-                onClick={() => setShowModal(false)}
+                onClick={closeModal}
                 className="flex-1 py-2 border border-white/[0.08] rounded-sm text-[10px] tracking-widest text-white/30 hover:text-white/60 transition-colors"
               >
                 CANCEL

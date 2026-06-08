@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
-import { useFinance } from "../../context/FinanceContext";
-import BASE_URL from "../../api/config";
+import React from "react";
+import { useRemittance } from "../../hooks/useRemittance";
 
 const CURRENCIES = ["USD", "KHR", "THB"];
 const MONTHS = [
@@ -35,9 +34,7 @@ const METHODS = [
   "Bank Transfer",
   "Other",
 ];
-
 const CURRENCY_SYMBOL = { USD: "$", KHR: "₭", THB: "฿" };
-
 const RELATION_STYLE = {
   Mother: "bg-pink-500/10 text-pink-400 border-pink-500/20",
   Father: "bg-blue-500/10 text-blue-400 border-blue-500/20",
@@ -48,7 +45,6 @@ const RELATION_STYLE = {
   Friend: "bg-green-500/10 text-green-400 border-green-500/20",
   Other: "bg-white/[0.04] text-white/40 border-white/[0.08]",
 };
-
 const METHOD_STYLE = {
   Cash: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
   "ABA Bank": "bg-blue-500/10 text-blue-400 border-blue-500/20",
@@ -58,208 +54,42 @@ const METHOD_STYLE = {
   Other: "bg-white/[0.04] text-white/40 border-white/[0.08]",
 };
 
-const today = new Date();
-const emptyForm = {
-  amount: "",
-  currency: "USD",
-  recipient: "",
-  recipientRelation: "Other",
-  method: "Cash",
-  remittanceDate: today.toISOString().split("T")[0],
-  year: today.getFullYear(),
-  monthNumber: today.getMonth() + 1,
-  day: today.getDate(),
-  noted: "",
-};
-
-const MAX_MONTH = today.getMonth() + 1;
-const MAX_YEAR = today.getFullYear();
-const MIN_YEAR = 2025;
-const YEAR_OPTIONS = Array.from(
-  { length: MAX_YEAR - MIN_YEAR + 1 },
-  (_, i) => MIN_YEAR + i,
-);
-
 export default function Remittance() {
-  const { syncHeaders, addNotice } = useFinance();
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [editTarget, setEditTarget] = useState(null);
-  const [form, setForm] = useState(emptyForm);
-  const [submitting, setSubmitting] = useState(false);
-  const [deleteId, setDeleteId] = useState(null);
-  const [filterRelation, setFilterRelation] = useState("ALL");
-
-  // ── Month/Year navigator ──
-  const [navMonth, setNavMonth] = useState(today.getMonth() + 1);
-  const [navYear, setNavYear] = useState(today.getFullYear());
-
-  const BASE = `${BASE_URL}/api/remittances`;
-
-  const fetchAll = async () => {
-    setLoading(true);
-    try {
-      const res = await fetch(BASE, { headers: syncHeaders() });
-      const data = await res.json();
-      if (data.success) setRecords(data.data);
-    } catch {
-      addNotice("Failed to load remittance records.", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAll();
-  }, []);
-
-  // ── Navigator helpers ──
-  const isCurrentMonth = navYear === MAX_YEAR && navMonth === MAX_MONTH;
-
-  const isFuture = (month, year) =>
-    year > MAX_YEAR || (year === MAX_YEAR && month > MAX_MONTH);
-
-  const goMonth = (dir) => {
-    let m = navMonth + dir;
-    let y = navYear;
-    if (m > 12) {
-      m = 1;
-      y += 1;
-    }
-    if (m < 1) {
-      m = 12;
-      y -= 1;
-    }
-    if (isFuture(m, y) || y < MIN_YEAR) return;
-    setNavMonth(m);
-    setNavYear(y);
-  };
-
-  const handleDateJump = (month, year) => {
-    if (!isFuture(month, year) && year >= MIN_YEAR) {
-      setNavMonth(month);
-      setNavYear(year);
-    }
-  };
-
-  const handleDateChange = (val) => {
-    const d = new Date(val);
-    setForm((f) => ({
-      ...f,
-      remittanceDate: val,
-      year: d.getFullYear(),
-      monthNumber: d.getMonth() + 1,
-      day: d.getDate(),
-    }));
-  };
-
-  const openCreate = () => {
-    setEditTarget(null);
-    setForm(emptyForm);
-    setShowModal(true);
-  };
-
-  const openEdit = (rec) => {
-    setEditTarget(rec._id);
-    setForm({
-      amount: rec.amount,
-      currency: rec.currency,
-      recipient: rec.recipient,
-      recipientRelation: rec.recipientRelation,
-      method: rec.method,
-      remittanceDate:
-        rec.remittanceDate?.split("T")[0] || today.toISOString().split("T")[0],
-      year: rec.year,
-      monthNumber: rec.monthNumber,
-      day: rec.day,
-      noted: rec.noted || "",
-    });
-    setShowModal(true);
-  };
-
-  const handleSubmit = async () => {
-    if (!form.amount || isNaN(form.amount) || Number(form.amount) <= 0)
-      return addNotice("Enter a valid amount.", "error");
-    if (!form.recipient.trim())
-      return addNotice("Recipient name is required.", "error");
-    setSubmitting(true);
-    try {
-      const method = editTarget ? "PUT" : "POST";
-      const url = editTarget ? `${BASE}/${editTarget}` : BASE;
-      const res = await fetch(url, {
-        method,
-        headers: syncHeaders(),
-        body: JSON.stringify({ ...form, amount: Number(form.amount) }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        addNotice(editTarget ? "Remittance updated." : "Remittance recorded.");
-        setShowModal(false);
-        fetchAll();
-      } else addNotice(data.message || "Operation failed.", "error");
-    } catch {
-      addNotice("Server error.", "error");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleDelete = async (id) => {
-    try {
-      const res = await fetch(`${BASE}/${id}`, {
-        method: "DELETE",
-        headers: syncHeaders(),
-      });
-      const data = await res.json();
-      if (data.success) {
-        addNotice("Record deleted.");
-        fetchAll();
-      } else addNotice(data.message || "Delete failed.", "error");
-    } catch {
-      addNotice("Server error.", "error");
-    } finally {
-      setDeleteId(null);
-    }
-  };
-
-  // ── Stats (all records) ──
-  const totalUSD = records.reduce((s, r) => s + (r.amountUSD || 0), 0);
-  const thisMonthRecords = records.filter(
-    (r) =>
-      r.monthNumber === today.getMonth() + 1 && r.year === today.getFullYear(),
-  );
-  const thisMonthUSD = thisMonthRecords.reduce(
-    (s, r) => s + (r.amountUSD || 0),
-    0,
-  );
-  const uniqueRecipients = [...new Set(records.map((r) => r.recipient))].length;
-
-  // ── Filtered by nav month/year ──
-  const navFiltered = records.filter(
-    (r) => r.monthNumber === navMonth && r.year === navYear,
-  );
-  const navMonthUSD = navFiltered.reduce((s, r) => s + (r.amountUSD || 0), 0);
-
-  const visible =
-    filterRelation === "ALL"
-      ? navFiltered
-      : navFiltered.filter((r) => r.recipientRelation === filterRelation);
-
-  // ── Recipient summary (nav month) ──
-  const recipientTotals = navFiltered.reduce((acc, r) => {
-    const key = r.recipient;
-    if (!acc[key])
-      acc[key] = {
-        name: key,
-        relation: r.recipientRelation,
-        total: 0,
-        count: 0,
-      };
-    acc[key].total += r.amountUSD || 0;
-    acc[key].count += 1;
-    return acc;
-  }, {});
+  const {
+    loading,
+    visible,
+    navFiltered,
+    navMonthUSD,
+    totalUSD,
+    thisMonthUSD,
+    thisMonthRecords,
+    uniqueRecipients,
+    recipientTotals,
+    navMonth,
+    navYear,
+    YEAR_OPTIONS,
+    MAX_YEAR,
+    MAX_MONTH,
+    isCurrentMonth,
+    isFuture,
+    goMonth,
+    handleDateJump,
+    filterRelation,
+    setFilterRelation,
+    showModal,
+    editTarget,
+    form,
+    setForm,
+    submitting,
+    openCreate,
+    openEdit,
+    closeModal,
+    handleSubmit,
+    handleDateChange,
+    deleteId,
+    setDeleteId,
+    handleDelete,
+  } = useRemittance();
 
   return (
     <div className="space-y-6 font-mono">
@@ -384,7 +214,7 @@ export default function Remittance() {
         </button>
       </div>
 
-      {/* ── Recipient Summary Cards (nav month) ── */}
+      {/* ── Recipient Summary Cards ── */}
       {Object.values(recipientTotals).length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {Object.values(recipientTotals).map((r) => (
@@ -514,7 +344,7 @@ export default function Remittance() {
                 {editTarget ? "Edit Remittance" : "New Remittance"}
               </p>
               <button
-                onClick={() => setShowModal(false)}
+                onClick={closeModal}
                 className="text-white/20 hover:text-white/60 text-lg leading-none"
               >
                 ×
@@ -642,7 +472,7 @@ export default function Remittance() {
 
             <div className="flex gap-3 pt-1">
               <button
-                onClick={() => setShowModal(false)}
+                onClick={closeModal}
                 className="flex-1 py-2 border border-white/[0.08] rounded-sm text-[10px] tracking-widest text-white/30 hover:text-white/60 transition-colors"
               >
                 CANCEL
