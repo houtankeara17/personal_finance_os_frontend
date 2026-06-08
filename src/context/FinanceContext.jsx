@@ -52,7 +52,7 @@ export const FinanceProvider = ({ children }) => {
     if (!activeToken) return;
 
     try {
-      const baseUrl = "http://localhost:5000/api";
+      const baseUrl = `${BASE_URL}/api`;
       const headers = {
         "Content-Type": "application/json",
         Authorization: `Bearer ${activeToken}`,
@@ -88,7 +88,7 @@ export const FinanceProvider = ({ children }) => {
 
   const executeLogin = async (email, password) => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/login", {
+      const res = await fetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, password }),
@@ -113,7 +113,7 @@ export const FinanceProvider = ({ children }) => {
 
   const executeRegister = async (name, email, password) => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/register", {
+      const res = await fetch(`${BASE_URL}/api/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, email, password }),
@@ -140,7 +140,7 @@ export const FinanceProvider = ({ children }) => {
   // ─── UPGRADED UNIFIED OAUTH INITIALIZER ──────────────────────────────────
   const executeOAuthSuccess = async (receivedToken) => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/me", {
+      const res = await fetch(`${BASE_URL}/api/auth/me`, {
         headers: { Authorization: `Bearer ${receivedToken}` },
       });
 
@@ -179,7 +179,7 @@ export const FinanceProvider = ({ children }) => {
 
   const updateProfileSettings = async (payload) => {
     try {
-      const res = await fetch("http://localhost:5000/api/auth/profile", {
+      const res = await fetch(`${BASE_URL}/api/auth/profile`, {
         method: "PUT",
         headers: syncHeaders(),
         body: JSON.stringify(payload),
