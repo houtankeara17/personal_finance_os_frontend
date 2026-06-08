@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react"; // <-- FIXED: Added useEffect here
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { FinanceProvider } from "./context/FinanceContext";
 import AppLayout from "./layouts/AppLayout";
@@ -15,7 +15,7 @@ import Plans from "./pages/plans/Plans";
 import Exchangelog from "./pages/exchangelog/Exchangelog";
 import Remittance from "./pages/remittance/Remittance";
 import Setting from "./pages/auth/Setting";
-import ResetPassword from "./pages/auth/ResetPassword"; // <-- Import stays the same
+import ResetPassword from "./pages/auth/ResetPassword";
 
 // Stubs only for modules still under construction
 const PlaceholderModule = ({ name }) => (
@@ -25,55 +25,160 @@ const PlaceholderModule = ({ name }) => (
   </div>
 );
 
+// Helper component to update document title dynamically
+const PageTitle = ({ title, children }) => {
+  useEffect(() => {
+    document.title = `${title} | Personal Finance OS`;
+  }, [title]);
+
+  return children;
+};
+
 export default function App() {
   return (
     <FinanceProvider>
       <BrowserRouter>
         <Routes>
           {/* =========================================================================
-              🔓 PUBLIC AUTHENTICATION CONTROL BOUNDARY (Accessible without being logged in)
+              🔓 PUBLIC AUTHENTICATION CONTROL BOUNDARY
              ========================================================================= */}
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route path="/oauth-callback" element={<OAuthCallback />} />
-
-          {/* ✅ MOVE RESET PASSWORD HERE OUTSIDE THE APPLAYOUT SHIELD! 👇 */}
-          <Route path="/reset-password" element={<ResetPassword />} />
+          <Route
+            path="/login"
+            element={
+              <PageTitle title="Login">
+                <Login />
+              </PageTitle>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <PageTitle title="Register">
+                <Register />
+              </PageTitle>
+            }
+          />
+          <Route
+            path="/oauth-callback"
+            element={
+              <PageTitle title="Authenticating...">
+                <OAuthCallback />
+              </PageTitle>
+            }
+          />
+          <Route
+            path="/reset-password"
+            element={
+              <PageTitle title="Reset Password">
+                <ResetPassword />
+              </PageTitle>
+            }
+          />
 
           {/* =========================================================================
-              🔒 SECURE PRODUCTION CORE CLUSTER LAYOUT FRAMEWORK (Requires Active Token)
+              🔒 SECURE PRODUCTION CORE CLUSTER LAYOUT FRAMEWORK
              ========================================================================= */}
           <Route path="/" element={<AppLayout />}>
             {/* ✅ Overview — live */}
-            <Route index element={<Overview />} />
+            <Route
+              index
+              element={
+                <PageTitle title="Dashboard">
+                  <Overview />
+                </PageTitle>
+              }
+            />
 
             {/* ✅ Expenses — live */}
-            <Route path="expenses" element={<Expenses />} />
+            <Route
+              path="expenses"
+              element={
+                <PageTitle title="Expenses">
+                  <Expenses />
+                </PageTitle>
+              }
+            />
 
             {/* ✅ Notes — live */}
-            <Route path="note" element={<Notes />} />
+            <Route
+              path="note"
+              element={
+                <PageTitle title="Notes">
+                  <Notes />
+                </PageTitle>
+              }
+            />
 
             {/* ✅ Bonus — live */}
-            <Route path="bonus" element={<Bonus />} />
+            <Route
+              path="bonus"
+              element={
+                <PageTitle title="Bonus Tracks">
+                  <Bonus />
+                </PageTitle>
+              }
+            />
 
             {/* ✅ Salary — live */}
-            <Route path="salary" element={<Salary />} />
+            <Route
+              path="salary"
+              element={
+                <PageTitle title="Salary Management">
+                  <Salary />
+                </PageTitle>
+              }
+            />
 
             {/* ✅ Savings — live */}
-            <Route path="saving" element={<Saving />} />
+            <Route
+              path="saving"
+              element={
+                <PageTitle title="Savings">
+                  <Saving />
+                </PageTitle>
+              }
+            />
 
             {/* ✅ Exchange Rate Log — live */}
-            <Route path="exchangelog" element={<Exchangelog />} />
+            <Route
+              path="exchangelog"
+              element={
+                <PageTitle title="Exchange Logs">
+                  <Exchangelog />
+                </PageTitle>
+              }
+            />
 
             {/* ✅ Remittance Tracker — live */}
-            <Route path="remittance" element={<Remittance />} />
+            <Route
+              path="remittance"
+              element={
+                <PageTitle title="Remittance Tracker">
+                  <Remittance />
+                </PageTitle>
+              }
+            />
 
-            <Route path="plans" element={<Plans />} />
+            <Route
+              path="plans"
+              element={
+                <PageTitle title="Financial Plans">
+                  <Plans />
+                </PageTitle>
+              }
+            />
 
             {/* 🚧 Future Modules */}
-            <Route path="setting" element={<Setting />} />
+            <Route
+              path="setting"
+              element={
+                <PageTitle title="Settings">
+                  <Setting />
+                </PageTitle>
+              }
+            />
 
-            {/* Catch-all fallback redirect within secure layout context */}
+            {/* Catch-all fallback redirect */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
