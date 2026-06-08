@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
+import BASE_URL from "../api/config";
 
 const FinanceContext = createContext();
 
