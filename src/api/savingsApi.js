@@ -33,4 +33,12 @@ export const savingsApi = {
     });
     return res.json();
   },
+
+  removeAll: async (headers) => {
+    const res = await fetch(BASE, {
+      method: "DELETE",
+      headers,
+    });
+    return res.json();
+  },
 };

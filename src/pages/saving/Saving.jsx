@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { useSavings } from "../../hooks/useSavings";
 
 const CURRENCIES = ["USD", "KHR", "THB"];
@@ -42,8 +42,18 @@ const CATEGORY_ICON = {
   Other: "📦",
 };
 
+const VIEW_MODES = ["GRID", "TABLE", "LIST"];
+const VIEW_STYLE = {
+  GRID: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+  TABLE: "bg-indigo-500/10 text-indigo-400 border-indigo-500/20",
+  LIST: "bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20",
+};
+
 export default function Savings() {
+  const [viewMode, setViewMode] = useState("TABLE");
+
   const {
+    records,
     loading,
     visible,
     navFiltered,
@@ -73,9 +83,11 @@ export default function Savings() {
     deleteId,
     setDeleteId,
     handleDelete,
+    showDeleteAll,
+    setShowDeleteAll,
+    handleDeleteAll,
   } = useSavings();
 
-  // Category breakdown (nav month only)
   const categoryTotals = CATEGORIES.map((cat) => {
     const items = navFiltered.filter((r) => r.category === cat);
     return {
@@ -97,12 +109,21 @@ export default function Savings() {
             Savings
           </h1>
         </div>
-        <button
-          onClick={openCreate}
-          className="flex items-center gap-2 px-4 py-2 bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] rounded-sm text-[11px] tracking-widest text-white/70 transition-all"
-        >
-          <span className="text-white/40">+</span> NEW SAVING
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowDeleteAll(true)}
+            disabled={records.length === 0}
+            className="flex items-center gap-2 px-4 py-2 bg-red-500/[0.06] hover:bg-red-500/[0.12] border border-red-500/[0.15] rounded-sm text-[11px] tracking-widest text-red-500/60 hover:text-red-400 transition-all disabled:opacity-20 disabled:cursor-not-allowed"
+          >
+            <span className="text-red-500/40">⌫</span> DELETE ALL
+          </button>
+          <button
+            onClick={openCreate}
+            className="flex items-center gap-2 px-4 py-2 bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] rounded-sm text-[11px] tracking-widest text-white/70 transition-all"
+          >
+            <span className="text-white/40">+</span> NEW SAVING
+          </button>
+        </div>
       </div>
 
       {/* ── Stats Row ── */}
@@ -165,7 +186,6 @@ export default function Savings() {
                 );
               })}
             </select>
-
             <select
               value={navYear}
               onChange={(e) => {
@@ -186,7 +206,6 @@ export default function Savings() {
               ))}
             </select>
           </div>
-
           <p className="text-[10px] text-white/25 mt-0.5">
             {navFiltered.length}{" "}
             {navFiltered.length !== 1 ? "entries" : "entry"} · $
@@ -243,91 +262,242 @@ export default function Savings() {
         </div>
       )}
 
-      {/* ── Filter Bar ── */}
-      <div className="flex flex-wrap gap-2">
-        {["ALL", ...CATEGORIES].map((cat) => (
-          <button
-            key={cat}
-            onClick={() => setFilterCat(cat)}
-            className={`px-3 py-1 rounded-sm text-[10px] tracking-widest border transition-all ${
-              filterCat === cat
-                ? cat === "ALL"
-                  ? "bg-white/[0.08] text-white/70 border-white/[0.15]"
-                  : `${CATEGORY_STYLE[cat]} border`
-                : "border-white/[0.06] text-white/25 hover:text-white/50"
-            }`}
-          >
-            {cat === "ALL"
-              ? "ALL"
-              : `${CATEGORY_ICON[cat]} ${cat.toUpperCase()}`}
-          </button>
-        ))}
-      </div>
-
-      {/* ── Table ── */}
-      <div className="border border-white/[0.06] rounded-sm overflow-hidden">
-        <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] text-[9px] tracking-[0.18em] text-white/20 border-b border-white/[0.06] px-4 py-2 bg-white/[0.02]">
-          <span>PERIOD</span>
-          <span>AMOUNT</span>
-          <span>USD VALUE</span>
-          <span>CATEGORY</span>
-          <span>ACTIONS</span>
+      {/* ── Filter Bar + View Switcher ── */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        {/* Category filters */}
+        <div className="flex flex-wrap gap-2">
+          {["ALL", ...CATEGORIES].map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setFilterCat(cat)}
+              className={`px-3 py-1 rounded-sm text-[10px] tracking-widest border transition-all ${
+                filterCat === cat
+                  ? cat === "ALL"
+                    ? "bg-white/[0.08] text-white/70 border-white/[0.15]"
+                    : `${CATEGORY_STYLE[cat]} border`
+                  : "border-white/[0.06] text-white/25 hover:text-white/50"
+              }`}
+            >
+              {cat === "ALL"
+                ? "ALL"
+                : `${CATEGORY_ICON[cat]} ${cat.toUpperCase()}`}
+            </button>
+          ))}
         </div>
 
-        {loading ? (
-          <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
-            LOADING RECORDS...
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
-            NO SAVINGS RECORDS FOR {MONTHS[navMonth - 1].toUpperCase()}{" "}
-            {navYear}
-          </div>
-        ) : (
-          visible.map((rec, i) => (
-            <div
-              key={rec._id}
-              className={`grid grid-cols-[1fr_1fr_1fr_1fr_auto] items-center px-4 py-3 text-[11px] border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors ${i % 2 === 0 ? "" : "bg-white/[0.01]"}`}
+        {/* View mode switcher */}
+        <div className="flex items-center gap-1 border border-white/[0.06] bg-white/[0.02] rounded-sm p-1">
+          {VIEW_MODES.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`px-3 py-1 rounded-sm text-[10px] tracking-widest border transition-all ${
+                viewMode === mode
+                  ? VIEW_STYLE[mode]
+                  : "border-transparent text-white/25 hover:text-white/50"
+              }`}
             >
-              <span className="text-white/60">
-                {MONTHS[rec.monthNumber - 1]?.slice(0, 3)} {rec.year}
-              </span>
-              <span className="text-white/80">
-                {CURRENCY_SYMBOL[rec.currency]}
-                {Number(rec.amount).toLocaleString()} {rec.currency}
-              </span>
-              <span className="text-white/50">
-                $
-                {Number(rec.amountUSD).toLocaleString(undefined, {
-                  minimumFractionDigits: 2,
-                })}
-              </span>
-              <span>
-                <span
-                  className={`px-2 py-0.5 rounded-sm text-[9px] border ${CATEGORY_STYLE[rec.category] || "text-white/40 border-white/10"}`}
-                >
-                  {CATEGORY_ICON[rec.category]} {rec.category.toUpperCase()}
-                </span>
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => openEdit(rec)}
-                  className="text-[9px] tracking-widest text-white/30 hover:text-white/70 transition-colors"
-                >
-                  EDIT
-                </button>
-                <span className="text-white/10">|</span>
-                <button
-                  onClick={() => setDeleteId(rec._id)}
-                  className="text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors"
-                >
-                  DEL
-                </button>
-              </div>
-            </div>
-          ))
-        )}
+              {mode}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* ── Records Display ── */}
+      {loading ? (
+        <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
+          LOADING RECORDS...
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="py-12 border border-white/[0.06] rounded-sm text-center text-[11px] text-white/20 tracking-widest">
+          NO SAVINGS RECORDS FOR {MONTHS[navMonth - 1].toUpperCase()} {navYear}
+        </div>
+      ) : (
+        <>
+          {/* TABLE VIEW */}
+          {viewMode === "TABLE" && (
+            <div className="border border-white/[0.06] rounded-sm overflow-hidden">
+              <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] text-[9px] tracking-[0.18em] text-white/20 border-b border-white/[0.06] px-4 py-2 bg-white/[0.02]">
+                <span>PERIOD</span>
+                <span>AMOUNT</span>
+                <span>USD VALUE</span>
+                <span>CATEGORY</span>
+                <span>ACTIONS</span>
+              </div>
+              {visible.map((rec, i) => (
+                <div
+                  key={rec._id}
+                  className={`grid grid-cols-[1fr_1fr_1fr_1fr_auto] items-center px-4 py-3 text-[11px] border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors ${i % 2 === 0 ? "" : "bg-white/[0.01]"}`}
+                >
+                  <span className="text-white/60">
+                    {MONTHS[rec.monthNumber - 1]?.slice(0, 3)} {rec.year}
+                  </span>
+                  <span className="text-white/80">
+                    {CURRENCY_SYMBOL[rec.currency]}
+                    {Number(rec.amount).toLocaleString()} {rec.currency}
+                  </span>
+                  <span className="text-white/50">
+                    $
+                    {Number(rec.amountUSD).toLocaleString(undefined, {
+                      minimumFractionDigits: 2,
+                    })}
+                  </span>
+                  <span>
+                    <span
+                      className={`px-2 py-0.5 rounded-sm text-[9px] border ${CATEGORY_STYLE[rec.category] || "text-white/40 border-white/10"}`}
+                    >
+                      {CATEGORY_ICON[rec.category]} {rec.category.toUpperCase()}
+                    </span>
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openEdit(rec)}
+                      className="text-[9px] tracking-widest text-white/30 hover:text-white/70 transition-colors"
+                    >
+                      EDIT
+                    </button>
+                    <span className="text-white/10">|</span>
+                    <button
+                      onClick={() => setDeleteId(rec._id)}
+                      className="text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors"
+                    >
+                      DEL
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* GRID VIEW */}
+          {viewMode === "GRID" && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {visible.map((rec) => (
+                <div
+                  key={rec._id}
+                  className="border border-white/[0.06] bg-white/[0.02] rounded-sm p-4 space-y-3 hover:bg-white/[0.04] transition-colors"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded-sm text-[9px] border ${CATEGORY_STYLE[rec.category] || "text-white/40 border-white/10"}`}
+                    >
+                      {CATEGORY_ICON[rec.category]} {rec.category.toUpperCase()}
+                    </span>
+                    <span className="text-[10px] text-white/30">
+                      {MONTHS[rec.monthNumber - 1]?.slice(0, 3)} {rec.year}
+                    </span>
+                  </div>
+
+                  <div>
+                    <p className="text-[18px] text-white/85 leading-tight">
+                      {CURRENCY_SYMBOL[rec.currency]}
+                      {Number(rec.amount).toLocaleString()}
+                      <span className="text-[11px] text-white/30 ml-1">
+                        {rec.currency}
+                      </span>
+                    </p>
+                    <p className="text-[11px] text-white/35 mt-0.5">
+                      ≈ $
+                      {Number(rec.amountUSD).toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                      })}{" "}
+                      USD
+                    </p>
+                  </div>
+
+                  {rec.noted && (
+                    <p className="text-[10px] text-white/30 border-t border-white/[0.04] pt-2 truncate">
+                      {rec.noted}
+                    </p>
+                  )}
+
+                  <div className="flex gap-2 pt-1 border-t border-white/[0.04]">
+                    <button
+                      onClick={() => openEdit(rec)}
+                      className="flex-1 text-[9px] tracking-widest text-white/30 hover:text-white/70 transition-colors text-center py-1"
+                    >
+                      EDIT
+                    </button>
+                    <span className="text-white/10">|</span>
+                    <button
+                      onClick={() => setDeleteId(rec._id)}
+                      className="flex-1 text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors text-center py-1"
+                    >
+                      DEL
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* LIST VIEW */}
+          {viewMode === "LIST" && (
+            <div className="space-y-2">
+              {visible.map((rec) => (
+                <div
+                  key={rec._id}
+                  className="flex items-center gap-4 border border-white/[0.06] bg-white/[0.02] rounded-sm px-4 py-3 hover:bg-white/[0.04] transition-colors"
+                >
+                  {/* Icon */}
+                  <span className="text-xl shrink-0">
+                    {CATEGORY_ICON[rec.category]}
+                  </span>
+
+                  {/* Main info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[12px] text-white/80">
+                        {CURRENCY_SYMBOL[rec.currency]}
+                        {Number(rec.amount).toLocaleString()} {rec.currency}
+                      </span>
+                      <span className="text-[10px] text-white/30">
+                        ≈ $
+                        {Number(rec.amountUSD).toLocaleString(undefined, {
+                          minimumFractionDigits: 2,
+                        })}{" "}
+                        USD
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <span
+                        className={`px-1.5 py-0.5 rounded-sm text-[9px] border ${CATEGORY_STYLE[rec.category] || "text-white/40 border-white/10"}`}
+                      >
+                        {rec.category.toUpperCase()}
+                      </span>
+                      <span className="text-[9px] text-white/25">
+                        {MONTHS[rec.monthNumber - 1]?.slice(0, 3)} {rec.year}
+                      </span>
+                      {rec.noted && (
+                        <span className="text-[9px] text-white/20 truncate max-w-[160px]">
+                          {rec.noted}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      onClick={() => openEdit(rec)}
+                      className="text-[9px] tracking-widest text-white/30 hover:text-white/70 transition-colors"
+                    >
+                      EDIT
+                    </button>
+                    <span className="text-white/10">|</span>
+                    <button
+                      onClick={() => setDeleteId(rec._id)}
+                      className="text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors"
+                    >
+                      DEL
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
 
       {/* ── Modal ── */}
       {showModal && (
@@ -493,6 +663,40 @@ export default function Savings() {
                 className="flex-1 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-sm text-[10px] tracking-widest text-red-400 transition-all"
               >
                 DELETE
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Delete All Confirm ── */}
+      {showDeleteAll && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="bg-[#0c0c0c] border border-red-500/20 rounded-sm w-full max-w-sm mx-4 p-6 space-y-4">
+            <div>
+              <p className="text-[10px] tracking-[0.2em] text-red-400/70 uppercase mb-1">
+                Danger Zone
+              </p>
+              <p className="text-[13px] text-white/70 font-semibold">
+                Delete All Savings?
+              </p>
+            </div>
+            <p className="text-[11px] text-white/40 leading-relaxed">
+              This will permanently remove all{" "}
+              <span className="text-white/70">{records.length}</span> saving
+              records across all months and years. This action cannot be undone.
+            </p>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setShowDeleteAll(false)}
+                className="flex-1 py-2 border border-white/[0.08] rounded-sm text-[10px] tracking-widest text-white/30 hover:text-white/60 transition-colors"
+              >
+                CANCEL
+              </button>
+              <button
+                onClick={handleDeleteAll}
+                className="flex-1 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-sm text-[10px] tracking-widest text-red-400 transition-all"
+              >
+                DELETE ALL
               </button>
             </div>
           </div>

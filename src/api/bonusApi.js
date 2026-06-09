@@ -6,10 +6,11 @@ const SALARY_BASE = `${BASE_URL}/api/salaries`;
 export const bonusApi = {
   getAll: (headers) => fetch(BASE, { headers }).then((r) => r.json()),
 
-  getSalaryForMonth: (year, month, headers) =>
-    fetch(`${SALARY_BASE}?year=${year}&monthNumber=${month}`, { headers }).then(
-      (r) => r.json(),
-    ),
+  // Ensure your API function looks like this:
+  getSalaryForMonth: (year, monthNumber, headers) =>
+    fetch(`${BASE_URL}/api/salaries?year=${year}&monthNumber=${monthNumber}`, {
+      headers,
+    }).then((r) => r.json()),
 
   create: (payload, headers) =>
     fetch(BASE, {

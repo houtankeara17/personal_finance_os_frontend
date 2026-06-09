@@ -5,7 +5,6 @@ import {
   MAX_MONTH,
   MONTHS,
   RATES,
-  isFuture,
 } from "../../hooks/useBonus";
 import { useFinance } from "../../context/FinanceContext";
 
@@ -46,12 +45,12 @@ const fmtUSD = (n) =>
     maximumFractionDigits: 2,
   });
 
-const emptyForm = (month, monthNumber, year) => ({
+const emptyForm = (year) => ({
   amount: "",
   currency: "USD",
   year: year ?? MAX_YEAR,
-  month: month ?? MONTHS[MAX_MONTH - 1],
-  monthNumber: monthNumber ?? MAX_MONTH,
+  month: MONTHS[MAX_MONTH - 1],
+  monthNumber: MAX_MONTH,
   tag: "🏆 Performance",
   status: "Confirmed",
   noted: "",
@@ -62,16 +61,16 @@ export default function Bonus() {
   const { addNotice } = useFinance();
   const {
     curYear,
-    curMonth,
     records,
     monthlySalary,
     loading,
     submitting,
-    goMonth,
-    handleDateJump,
-    isCurrentMonth,
+    goYear,
+    handleYearJump,
+    isCurrentYear,
     saveRecord,
     deleteRecord,
+    fetchSalary,
     stats,
   } = useBonus();
 
@@ -81,31 +80,54 @@ export default function Bonus() {
   const [deleteId, setDeleteId] = useState(null);
   const [filterTag, setFilterTag] = useState("ALL");
 
+  // View Modes and Calendar Details
+  const [viewMode, setViewMode] = useState("TABLE"); // "TABLE" | "CALENDAR"
+  const [selectedCalendarDay, setSelectedCalendarDay] = useState(null);
+  const [calendarMonth, setCalendarMonth] = useState(MAX_MONTH); // month shown in calendar
+
   // ── Modal helpers ──────────────────────────────────────────────────────
   const openCreate = () => {
     setEditTarget(null);
-    setForm(emptyForm(MONTHS[curMonth - 1], curMonth, curYear));
+    const initialForm = emptyForm(curYear);
+    setForm(initialForm);
     setShowModal(true);
+
+    // ⭐️ Sync up immediately on open
+    fetchSalary(initialForm.year, initialForm.monthNumber);
   };
 
   const openEdit = (rec) => {
     setEditTarget(rec._id);
+    const mNum = rec.monthNumber || MONTHS.indexOf(rec.month) + 1;
     setForm({
       amount: rec.amount,
       currency: rec.currency,
       year: rec.year,
       month: rec.month,
-      monthNumber: rec.monthNumber,
+      monthNumber: mNum,
       tag: rec.tag,
       status: rec.status,
       noted: rec.noted || "",
     });
     setShowModal(true);
+
+    // ⭐️ Sync up immediately on open
+    fetchSalary(rec.year, mNum);
   };
 
-  const handleMonthChange = (monthName) => {
-    const idx = MONTHS.indexOf(monthName);
-    setForm((f) => ({ ...f, month: monthName, monthNumber: idx + 1 }));
+  const handleMonthChange = (selectedMonthName) => {
+    // 1. Convert the month string (e.g. "June") to its number value (e.g. 6)
+    const numericIndex = MONTHS.indexOf(selectedMonthName) + 1;
+
+    // 2. Save the update to your local modal form state
+    setForm((prev) => ({
+      ...prev,
+      month: selectedMonthName,
+      monthNumber: numericIndex,
+    }));
+
+    // 3. ⭐️ TELL THE HOOK TO FETCH THE REAL SALARY FOR THIS SELECT!
+    fetchSalary(form.year, numericIndex);
   };
 
   const handleSubmit = async () => {
@@ -116,20 +138,48 @@ export default function Bonus() {
   const handleDelete = async (id) => {
     await deleteRecord(id);
     setDeleteId(null);
+    setSelectedCalendarDay(null);
   };
 
   // ── Derived (view-only) ────────────────────────────────────────────────
-  const { monthRecords } = stats;
-  const monthLabel = `${MONTHS[curMonth - 1]} ${curYear}`;
+  const { yearRecords } = stats;
   const visible =
     filterTag === "ALL"
-      ? monthRecords
-      : monthRecords.filter((r) => r.tag === filterTag);
+      ? yearRecords
+      : yearRecords.filter((r) => r.tag === filterTag);
 
   const previewUSD =
     form.amount && !isNaN(form.amount) && Number(form.amount) > 0
       ? Number(form.amount) / RATES[form.currency]
       : null;
+
+  // ── Calendar Helpers ───────────────────────────────────────────────────
+  const getDaysInMonth = (year, month) => new Date(year, month, 0).getDate();
+  const getFirstDayIndex = (year, month) =>
+    new Date(year, month - 1, 1).getDay();
+
+  const daysInMonth = getDaysInMonth(curYear, calendarMonth);
+  const firstDayIndex = getFirstDayIndex(curYear, calendarMonth);
+  const calendarPaddingCells = Array(firstDayIndex).fill(null);
+  const calendarDays = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  // Records for currently viewed calendar month
+  const calendarMonthRecords = yearRecords.filter(
+    (r) => r.monthNumber === calendarMonth,
+  );
+  const calendarVisible =
+    filterTag === "ALL"
+      ? calendarMonthRecords
+      : calendarMonthRecords.filter((r) => r.tag === filterTag);
+
+  const getRecordDay = (rec) => {
+    if (rec.date) return new Date(rec.date).getDate();
+    if (rec.createdAt) return new Date(rec.createdAt).getDate();
+    return 1;
+  };
+
+  const getBonusesForDay = (day) =>
+    calendarVisible.filter((rec) => getRecordDay(rec) === day);
 
   // ── Render ─────────────────────────────────────────────────────────────
   return (
@@ -175,11 +225,14 @@ export default function Bonus() {
         ))}
       </div>
 
-      {/* Month Navigator */}
+      {/* Year Navigator */}
       <div className="flex items-center justify-between border border-white/[0.06] bg-white/[0.02] rounded-sm px-5 py-3">
         <button
-          onClick={() => goMonth(-1)}
-          aria-label="Previous month"
+          onClick={() => {
+            goYear(-1);
+            setSelectedCalendarDay(null);
+          }}
+          aria-label="Previous year"
           className="text-white/30 hover:text-white/70 text-lg px-2 transition-colors"
         >
           ‹
@@ -188,33 +241,10 @@ export default function Bonus() {
         <div className="flex flex-col items-center gap-1">
           <div className="flex items-center gap-2">
             <select
-              value={curMonth}
-              onChange={(e) => handleDateJump(Number(e.target.value), curYear)}
-              className="bg-transparent text-white/80 text-[13px] font-semibold tracking-widest uppercase cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
-            >
-              {MONTHS.map((name, index) => {
-                const monthNum = index + 1;
-                return (
-                  <option
-                    key={name}
-                    value={monthNum}
-                    disabled={isFuture(monthNum, curYear)}
-                    className="bg-[#121212] text-white"
-                  >
-                    {name.toUpperCase()}
-                  </option>
-                );
-              })}
-            </select>
-            <select
               value={curYear}
               onChange={(e) => {
-                const newYear = Number(e.target.value);
-                const clampedMonth =
-                  newYear === MAX_YEAR && curMonth > MAX_MONTH
-                    ? MAX_MONTH
-                    : curMonth;
-                handleDateJump(clampedMonth, newYear);
+                handleYearJump(Number(e.target.value));
+                setSelectedCalendarDay(null);
               }}
               className="bg-transparent text-white/80 text-[13px] font-semibold tracking-widest cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
             >
@@ -226,53 +256,57 @@ export default function Bonus() {
             </select>
           </div>
           <p className="text-[10px] text-white/25 mt-0.5">
-            {monthRecords.length} bonus{monthRecords.length !== 1 ? "es" : ""}{" "}
-            this month
+            {yearRecords.length} bonus{yearRecords.length !== 1 ? "es" : ""}{" "}
+            this year
           </p>
-          {isCurrentMonth && (
+          {isCurrentYear && (
             <p className="text-[8px] tracking-widest text-white/20">
-              CURRENT MONTH
+              CURRENT YEAR
             </p>
           )}
         </div>
 
         <button
-          onClick={() => goMonth(+1)}
-          disabled={isCurrentMonth}
-          aria-label="Next month"
+          onClick={() => {
+            goYear(+1);
+            setSelectedCalendarDay(null);
+          }}
+          disabled={isCurrentYear}
+          aria-label="Next year"
           className="text-white/30 hover:text-white/70 text-lg px-2 transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
         >
           ›
         </button>
       </div>
 
-      {/* Month Summary */}
-      {monthRecords.length > 0 && (
+      {/* Year Summary Grid Overview */}
+      {yearRecords.length > 0 && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
+            // 1st Box: Show single current/selected month's salary
             {
-              label: "SALARY",
+              label: "MONTHLY SALARY",
               value: `$${fmtUSD(monthlySalary)}`,
-              sub: "base pay",
+              sub: "salary per month",
             },
+            // 2nd Box: Show total monthly salary minus the monthly bonus
             {
-              label: "BONUS",
-              value: `$${fmtUSD(stats.monthBonusUSD)}`,
-              sub: stats.salaryRatio
-                ? `${stats.salaryRatio}% of salary`
-                : undefined,
-              accent: "text-emerald-400",
+              label: "SALARY LESS BONUS",
+              value: `$${fmtUSD(monthlySalary - (stats.currentMonthBonusUSD || 0))}`,
+              sub: "monthly base minus bonus",
             },
+            // 3rd Box: Show cumulative salary across all months
+            {
+              label: "CUMULATIVE SALARY",
+              value: `$${fmtUSD(stats.yearSalaryUSD)}`,
+              sub: "total salary all months",
+            },
+            // 4th Box: Show total cumulative salaries + all bonuses combined
             {
               label: "TOTAL COMP",
               value: `$${fmtUSD(stats.totalComp)}`,
-              sub: "salary + bonus",
+              sub: "all months salary + bonus",
               accent: "text-sky-400",
-            },
-            {
-              label: "RECORDS",
-              value: monthRecords.length,
-              sub: `${monthRecords.filter((r) => r.status === "Disbursed").length} disbursed`,
             },
           ].map((s) => (
             <div
@@ -293,107 +327,323 @@ export default function Bonus() {
         </div>
       )}
 
-      {/* Tag Filter */}
-      <div className="flex flex-wrap gap-2">
-        {["ALL", ...TAGS].map((t) => (
-          <button
-            key={t}
-            onClick={() => setFilterTag(t)}
-            className={`px-3 py-1 rounded-sm text-[10px] tracking-widest border transition-all ${
-              filterTag === t
-                ? t === "ALL"
-                  ? "bg-white/[0.08] text-white/70 border-white/[0.15]"
-                  : `${TAG_STYLE[t]} border`
-                : "border-white/[0.06] text-white/25 hover:text-white/50"
-            }`}
-          >
-            {t === "ALL" ? "ALL TAGS" : t}
-          </button>
-        ))}
-      </div>
-
-      {/* Table */}
-      <div className="border border-white/[0.06] rounded-sm overflow-hidden">
-        <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] text-[9px] tracking-[0.18em] text-white/20 border-b border-white/[0.06] px-4 py-2 bg-white/[0.02]">
-          <span>PERIOD</span>
-          <span>AMOUNT</span>
-          <span>USD VALUE</span>
-          <span>TAG</span>
-          <span>STATUS</span>
-          <span>ACTIONS</span>
+      {/* Navigation Layout Controls (Table View / Calendar View) */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/[0.06] pb-4">
+        {/* Tag Filters */}
+        <div className="flex flex-wrap gap-2">
+          {["ALL", ...TAGS].map((t) => (
+            <button
+              key={t}
+              onClick={() => {
+                setFilterTag(t);
+                setSelectedCalendarDay(null);
+              }}
+              className={`px-3 py-1 rounded-sm text-[10px] tracking-widest border transition-all ${
+                filterTag === t
+                  ? t === "ALL"
+                    ? "bg-white/[0.08] text-white/70 border-white/[0.15]"
+                    : `${TAG_STYLE[t]} border`
+                  : "border-white/[0.06] text-white/25 hover:text-white/50"
+              }`}
+            >
+              {t === "ALL" ? "ALL TAGS" : t}
+            </button>
+          ))}
         </div>
 
-        {loading ? (
-          <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
-            LOADING RECORDS...
+        {/* View Switcher Controls */}
+        <div className="flex border border-white/[0.08] rounded-sm p-0.5 bg-white/[0.01]">
+          <button
+            onClick={() => setViewMode("TABLE")}
+            className={`px-3 py-1 text-[10px] tracking-widest transition-all rounded-xs ${
+              viewMode === "TABLE"
+                ? "bg-white/[0.08] text-white/80 font-medium"
+                : "text-white/30 hover:text-white/60"
+            }`}
+          >
+            LIST TABLE
+          </button>
+          <button
+            onClick={() => setViewMode("CALENDAR")}
+            className={`px-3 py-1 text-[10px] tracking-widest transition-all rounded-xs flex items-center gap-1.5 ${
+              viewMode === "CALENDAR"
+                ? "bg-white/[0.08] text-white/80 font-medium"
+                : "text-white/30 hover:text-white/60"
+            }`}
+          >
+            📅 CALENDAR
+          </button>
+        </div>
+      </div>
+
+      {/* Main Data Container View Logic */}
+      {viewMode === "TABLE" ? (
+        /* ─── List Table Mode ─── */
+        <div className="border border-white/[0.06] rounded-sm overflow-hidden">
+          <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] text-[9px] tracking-[0.18em] text-white/20 border-b border-white/[0.06] px-4 py-2 bg-white/[0.02]">
+            <span>PERIOD</span>
+            <span>AMOUNT</span>
+            <span>USD VALUE</span>
+            <span>TAG</span>
+            <span>STATUS</span>
+            <span>ACTIONS</span>
           </div>
-        ) : monthRecords.length === 0 ? (
-          <div className="py-14 text-center space-y-2">
-            <p className="text-[11px] tracking-[0.2em] text-white/20 uppercase">
-              No bonuses in {monthLabel}
-            </p>
-            <p className="text-[10px] text-white/15">
-              Salary: ${fmtUSD(monthlySalary)} · Bonus: $0.00 · Nothing logged
-              yet
-            </p>
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="py-12 text-center space-y-1">
-            <p className="text-[11px] tracking-[0.2em] text-white/20 uppercase">
-              No records match this tag
-            </p>
-            <p className="text-[10px] text-white/15">
-              {monthRecords.length} record{monthRecords.length !== 1 ? "s" : ""}{" "}
-              exist — try ALL TAGS
-            </p>
-          </div>
-        ) : (
-          visible.map((rec, i) => (
-            <div
-              key={rec._id}
-              className={`grid grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] items-center px-4 py-3 text-[11px] border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors ${i % 2 !== 0 ? "bg-white/[0.01]" : ""}`}
+
+          {loading ? (
+            <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
+              LOADING RECORDS...
+            </div>
+          ) : yearRecords.length === 0 ? (
+            <div className="py-14 text-center space-y-2">
+              <p className="text-[11px] tracking-[0.2em] text-white/20 uppercase">
+                No bonuses in {curYear}
+              </p>
+              <p className="text-[10px] text-white/15">
+                Salary: ${fmtUSD(monthlySalary)} · Bonus: $0.00 · Nothing logged
+                yet
+              </p>
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="py-12 text-center space-y-1">
+              <p className="text-[11px] tracking-[0.2em] text-white/20 uppercase">
+                No records match this tag
+              </p>
+              <p className="text-[10px] text-white/15">
+                {yearRecords.length} record{yearRecords.length !== 1 ? "s" : ""}{" "}
+                exist — try ALL TAGS
+              </p>
+            </div>
+          ) : (
+            visible.map((rec, i) => (
+              <div
+                key={rec._id}
+                className={`grid grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] items-center px-4 py-3 text-[11px] border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors ${i % 2 !== 0 ? "bg-white/[0.01]" : ""}`}
+              >
+                <span className="text-white/60">
+                  {rec.month} {rec.year}
+                </span>
+                <span className="text-white/80">
+                  {CURRENCY_SYMBOL[rec.currency] || "$"}
+                  {Number(rec.amount).toLocaleString()} {rec.currency}
+                </span>
+                <span className="text-white/50">${fmtUSD(rec.amountUSD)}</span>
+                <span>
+                  <span
+                    className={`px-2 py-0.5 rounded-sm text-[9px] border ${TAG_STYLE[rec.tag] || "text-white/40 border-white/10"}`}
+                  >
+                    {rec.tag}
+                  </span>
+                </span>
+                <span>
+                  <span
+                    className={`px-2 py-0.5 rounded-sm text-[9px] tracking-widest ${STATUS_STYLE[rec.status] || STATUS_STYLE.Draft}`}
+                  >
+                    {rec.status ? rec.status.toUpperCase() : "DRAFT"}
+                  </span>
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => openEdit(rec)}
+                    className="text-[9px] tracking-widest text-white/30 hover:text-white/70 transition-colors"
+                  >
+                    EDIT
+                  </button>
+                  <span className="text-white/10">|</span>
+                  <button
+                    onClick={() => setDeleteId(rec._id)}
+                    className="text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors"
+                  >
+                    DEL
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      ) : (
+        /* ─── Calendar Mode ─── */
+        <div className="space-y-4">
+          {/* Calendar Month Switcher */}
+          <div className="flex items-center justify-between border border-white/[0.06] bg-white/[0.02] rounded-sm px-4 py-2">
+            <button
+              onClick={() => setCalendarMonth((m) => (m === 1 ? 12 : m - 1))}
+              className="text-white/30 hover:text-white/70 text-lg px-2 transition-colors"
             >
-              <span className="text-white/60">
-                {rec.month} {rec.year}
-              </span>
-              <span className="text-white/80">
-                {CURRENCY_SYMBOL[rec.currency] || "$"}
-                {Number(rec.amount).toLocaleString()} {rec.currency}
-              </span>
-              <span className="text-white/50">${fmtUSD(rec.amountUSD)}</span>
-              <span>
-                <span
-                  className={`px-2 py-0.5 rounded-sm text-[9px] border ${TAG_STYLE[rec.tag] || "text-white/40 border-white/10"}`}
-                >
-                  {rec.tag}
-                </span>
-              </span>
-              <span>
-                <span
-                  className={`px-2 py-0.5 rounded-sm text-[9px] tracking-widest ${STATUS_STYLE[rec.status] || STATUS_STYLE.Draft}`}
-                >
-                  {rec.status ? rec.status.toUpperCase() : "DRAFT"}
-                </span>
-              </span>
-              <div className="flex gap-2">
+              ‹
+            </button>
+            <div className="flex items-center gap-2">
+              <select
+                value={calendarMonth}
+                onChange={(e) => {
+                  setCalendarMonth(Number(e.target.value));
+                  setSelectedCalendarDay(null);
+                }}
+                className="bg-transparent text-white/70 text-[11px] tracking-widest uppercase cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
+              >
+                {MONTHS.map((name, index) => (
+                  <option
+                    key={name}
+                    value={index + 1}
+                    className="bg-[#121212] text-white"
+                  >
+                    {name.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+              <span className="text-white/30 text-[11px]">{curYear}</span>
+            </div>
+            <button
+              onClick={() => setCalendarMonth((m) => (m === 12 ? 1 : m + 1))}
+              className="text-white/30 hover:text-white/70 text-lg px-2 transition-colors"
+            >
+              ›
+            </button>
+          </div>
+
+          <div className="border border-white/[0.06] rounded-sm bg-white/[0.01] overflow-hidden p-4">
+            {/* Days of Week Row */}
+            <div className="grid grid-cols-7 gap-1 text-center text-[9px] tracking-widest text-white/20 mb-2 font-bold py-1">
+              {["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((d) => (
+                <span key={d}>{d}</span>
+              ))}
+            </div>
+
+            {/* Calendar Numbers Matrix Grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {calendarPaddingCells.map((_, index) => (
+                <div
+                  key={`pad-${index}`}
+                  className="aspect-square bg-transparent border border-transparent"
+                />
+              ))}
+
+              {calendarDays.map((day) => {
+                const dayBonuses = getBonusesForDay(day);
+                const hasBonus = dayBonuses.length > 0;
+                const totalDayUSD = dayBonuses.reduce(
+                  (sum, r) => sum + (Number(r.amountUSD) || 0),
+                  0,
+                );
+                const isSelected = selectedCalendarDay === day;
+
+                return (
+                  <button
+                    key={`day-${day}`}
+                    disabled={loading}
+                    onClick={() =>
+                      setSelectedCalendarDay(isSelected ? null : day)
+                    }
+                    className={`aspect-square p-1.5 flex flex-col justify-between items-start border rounded-xs transition-all text-left relative ${
+                      isSelected
+                        ? "border-white/50 bg-white/[0.08]"
+                        : hasBonus
+                          ? "border-emerald-500/30 bg-emerald-500/[0.03] hover:bg-emerald-500/[0.06]"
+                          : "border-white/[0.04] bg-white/[0.01] hover:bg-white/[0.03]"
+                    }`}
+                  >
+                    <span
+                      className={`text-[10px] ${hasBonus ? "text-emerald-400 font-semibold" : "text-white/40"}`}
+                    >
+                      {day}
+                    </span>
+
+                    {hasBonus && (
+                      <div className="w-full text-[8px] text-white/70 truncate tracking-tight font-sans">
+                        $
+                        {totalDayUSD > 0
+                          ? fmtUSD(totalDayUSD).split(".")[0]
+                          : "0"}
+                        {dayBonuses.length > 1 && (
+                          <span className="text-[7px] text-emerald-500/60 block">
+                            {dayBonuses.length} items
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Inline Calendar Selected Detail Drawer */}
+          {selectedCalendarDay && (
+            <div className="border border-white/[0.08] bg-white/[0.03] p-4 rounded-sm space-y-3 animation-fade-in">
+              <div className="flex justify-between items-center border-b border-white/[0.06] pb-2">
+                <p className="text-[10px] tracking-wider text-emerald-400 font-bold uppercase">
+                  Details for {MONTHS[calendarMonth - 1]} {selectedCalendarDay},{" "}
+                  {curYear}
+                </p>
                 <button
-                  onClick={() => openEdit(rec)}
-                  className="text-[9px] tracking-widest text-white/30 hover:text-white/70 transition-colors"
+                  onClick={() => setSelectedCalendarDay(null)}
+                  className="text-[9px] text-white/30 hover:text-white/60 tracking-widest"
                 >
-                  EDIT
-                </button>
-                <span className="text-white/10">|</span>
-                <button
-                  onClick={() => setDeleteId(rec._id)}
-                  className="text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors"
-                >
-                  DEL
+                  CLOSE [X]
                 </button>
               </div>
+
+              {getBonusesForDay(selectedCalendarDay).length === 0 ? (
+                <p className="text-[11px] text-white/30 py-2">
+                  No targeted tag bonuses found on this day matrix context.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {getBonusesForDay(selectedCalendarDay).map((rec) => (
+                    <div
+                      key={rec._id}
+                      className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 bg-[#0c0c0c] border border-white/[0.04] rounded-sm gap-2 text-[11px]"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white/90 font-medium">
+                            {CURRENCY_SYMBOL[rec.currency] || "$"}
+                            {Number(rec.amount).toLocaleString()} {rec.currency}
+                          </span>
+                          <span className="text-white/30">
+                            (${fmtUSD(rec.amountUSD)} USD)
+                          </span>
+                        </div>
+                        {rec.noted && (
+                          <p className="text-[10px] text-white/40 italic">
+                            "{rec.noted}"
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                        <span
+                          className={`px-2 py-0.5 rounded-sm text-[9px] border ${TAG_STYLE[rec.tag] || ""}`}
+                        >
+                          {rec.tag}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-sm text-[9px] tracking-widest ${STATUS_STYLE[rec.status] || ""}`}
+                        >
+                          {rec.status?.toUpperCase()}
+                        </span>
+                        <div className="flex gap-2 text-[9px] pl-2 border-l border-white/10">
+                          <button
+                            onClick={() => openEdit(rec)}
+                            className="text-white/40 hover:text-white/80"
+                          >
+                            EDIT
+                          </button>
+                          <button
+                            onClick={() => setDeleteId(rec._id)}
+                            className="text-red-500/40 hover:text-red-400"
+                          >
+                            DEL
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          ))
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       {/* Create / Edit Modal */}
       {showModal && (
@@ -414,17 +664,18 @@ export default function Bonus() {
             {/* Read-only salary */}
             <div className="space-y-1">
               <label className="text-[9px] tracking-widest text-white/25">
-                MONTHLY SALARY (USD) — READ ONLY
+                BASE SALARY FOR {form.month?.toUpperCase()} {form.year} — READ
+                ONLY
               </label>
               <input
                 type="text"
                 disabled
                 value={
                   monthlySalary > 0
-                    ? `$${fmtUSD(monthlySalary)}`
-                    : "No salary on record for this month"
+                    ? `$${fmtUSD(monthlySalary)} (${form.month} ${form.year})`
+                    : `No salary record found for ${form.month} ${form.year}`
                 }
-                className="w-full bg-white/[0.02] border border-white/[0.05] rounded-sm px-3 py-2 text-[12px] text-white/30 cursor-not-allowed"
+                className="w-full bg-white/[0.02] border border-white/[0.04] rounded-sm px-3 py-2 text-[12px] text-white/40 cursor-not-allowed select-none"
               />
             </div>
 
@@ -462,7 +713,7 @@ export default function Bonus() {
               </div>
             </div>
 
-            {/* Live preview */}
+            {/* Live dynamic layout preview (Fixed Logic From Subtraction to Addition) */}
             {previewUSD !== null && (
               <div className="grid grid-cols-3 gap-2 border border-white/[0.06] bg-white/[0.02] rounded-sm px-4 py-3">
                 <div>
@@ -486,7 +737,7 @@ export default function Bonus() {
                     TOTAL COMP
                   </p>
                   <p className="text-[12px] text-sky-400">
-                    ${fmtUSD(monthlySalary + previewUSD)}
+                    ${fmtUSD(Number(monthlySalary) + Number(previewUSD))}
                   </p>
                 </div>
               </div>
@@ -515,15 +766,18 @@ export default function Bonus() {
                 <input
                   type="number"
                   value={form.year}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, year: Number(e.target.value) }))
-                  }
+                  onChange={(e) => {
+                    const newYear = Number(e.target.value);
+                    setForm((f) => ({ ...f, year: newYear }));
+                    // ⭐️ Re-fetch base salary dynamically when year shifts!
+                    fetchSalary(newYear, form.monthNumber);
+                  }}
                   className="w-full bg-white/[0.04] border border-white/[0.08] rounded-sm px-3 py-2 text-[12px] text-white/80 focus:outline-none focus:border-white/20"
                 />
               </div>
             </div>
 
-            {/* Tag */}
+            {/* Tag Selection Matrix */}
             <div className="space-y-2">
               <label className="text-[9px] tracking-widest text-white/25">
                 BONUS TAG
@@ -542,7 +796,7 @@ export default function Bonus() {
               </div>
             </div>
 
-            {/* Status */}
+            {/* Status Selector Rows */}
             <div className="space-y-1">
               <label className="text-[9px] tracking-widest text-white/25">
                 STATUS
@@ -561,7 +815,7 @@ export default function Bonus() {
               </div>
             </div>
 
-            {/* Notes */}
+            {/* Optional text area Notes */}
             <div className="space-y-1">
               <label className="text-[9px] tracking-widest text-white/25">
                 NOTES
@@ -577,6 +831,7 @@ export default function Bonus() {
               />
             </div>
 
+            {/* Modal Actions */}
             <div className="flex gap-3 pt-1">
               <button
                 type="button"
@@ -591,7 +846,7 @@ export default function Bonus() {
                 disabled={submitting}
                 className="flex-1 py-2 bg-white/[0.07] hover:bg-white/[0.12] border border-white/[0.1] rounded-sm text-[10px] tracking-widest text-white/70 transition-all disabled:opacity-40"
               >
-                {submitting ? "SAVING..." : editTarget ? "UPDATE" : "CREATE"}
+                SAVE RECORD
               </button>
             </div>
           </div>

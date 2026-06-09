@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 
-// ─── CONFIG ───────────────────────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
-// ─── API HELPER ───────────────────────────────────────────────────────────────
 async function apiFetch(path) {
   const token = localStorage.getItem("token");
   const res = await fetch(`${API_BASE}${path}`, {
@@ -17,7 +15,6 @@ async function apiFetch(path) {
   return res.json();
 }
 
-// ─── FORMAT HELPERS ───────────────────────────────────────────────────────────
 function fmt(val, currency = "USD") {
   if (val == null || isNaN(Number(val))) return "$0.00";
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(
@@ -43,12 +40,10 @@ function spark(arr, key = "amount") {
   return vals.length ? vals : [0, 0, 0, 0, 0, 0, 0];
 }
 
-// ─── Safely extract array from any API shape ─────────────────────────────────
 function extract(res) {
   if (res.status !== "fulfilled") return [];
   const v = res.value;
   if (Array.isArray(v)) return v;
-  // Try all common keys
   for (const key of [
     "data",
     "salaries",
@@ -68,26 +63,35 @@ function extract(res) {
   return [];
 }
 
-// ─── Sparkline ────────────────────────────────────────────────────────────────
 function Sparkline({ values = [], color = "#22c55e" }) {
   const v = values.length ? values : [0, 0, 0, 0, 0, 0, 0];
   const max = Math.max(...v),
     min = Math.min(...v);
-  const h = 24,
-    w = 64;
+  const h = 28,
+    w = 72;
   const pts = v.map((val, i) => {
     const x = (i / (v.length - 1)) * w;
     const y = h - ((val - min) / (max - min || 1)) * h;
     return `${x},${y}`;
   });
   return (
-    <svg
-      width={w}
-      height={h}
-      viewBox={`0 0 ${w} ${h}`}
-      fill="none"
-      style={{ opacity: 0.65 }}
-    >
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} fill="none">
+      <defs>
+        <linearGradient
+          id={`sg-${color.replace("#", "")}`}
+          x1="0"
+          y1="0"
+          x2="0"
+          y2="1"
+        >
+          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon
+        points={`0,${h} ${pts.join(" ")} ${w},${h}`}
+        fill={`url(#sg-${color.replace("#", "")})`}
+      />
       <polyline
         points={pts.join(" ")}
         stroke={color}
@@ -100,11 +104,9 @@ function Sparkline({ values = [], color = "#22c55e" }) {
   );
 }
 
-// ─── POPUP MODAL ─────────────────────────────────────────────────────────────
 function Modal({ config, onClose }) {
   const [tab, setTab] = useState(0);
   if (!config) return null;
-
   const { title, icon, color, items, columns, summaryRows, emptyMsg } = config;
 
   return (
@@ -114,51 +116,47 @@ function Modal({ config, onClose }) {
         position: "fixed",
         inset: 0,
         zIndex: 200,
-        background: "rgba(0,0,0,0.7)",
+        background: "rgba(0,0,0,0.75)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backdropFilter: "blur(4px)",
-        animation: "fadeIn 0.2s ease",
+        backdropFilter: "blur(8px)",
+        animation: "fadeIn 0.18s ease",
       }}
     >
       <style>{`
-        @keyframes fadeIn { from { opacity:0 } to { opacity:1 } }
-        @keyframes slideUp { from { opacity:0; transform:translateY(20px) } to { opacity:1; transform:translateY(0) } }
-        .modal-scroll::-webkit-scrollbar { width: 4px; }
-        .modal-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
-        .modal-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-        .tab-btn { background:none; border:none; cursor:pointer; font-family:'DM Mono',monospace; font-size:11px; padding:6px 14px; border-radius:7px; transition:all 0.15s; }
-        .tab-btn.active { background:rgba(255,255,255,0.08); color:#fff; }
-        .tab-btn:not(.active) { color:rgba(255,255,255,0.35); }
-        .tab-btn:not(.active):hover { color:rgba(255,255,255,0.6); }
-        .item-row { display:grid; gap:10px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,0.05); font-size:12px; align-items:center; }
-        .item-row:last-child { border:none; }
-        .cell { color:rgba(255,255,255,0.75); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-        .cell.mono { font-family:'DM Mono',monospace; font-size:11px; }
-        .cell.accent { font-weight:600; }
-        .col-head { font-size:10px; color:rgba(255,255,255,0.3); font-family:'DM Mono',monospace; text-transform:uppercase; letter-spacing:0.06em; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.06); margin-bottom:4px; display:grid; gap:10px; align-items:center; }
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+        @keyframes slideUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+        .ms::-webkit-scrollbar{width:3px}
+        .ms::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:4px}
+        .tb{background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;border-radius:6px;transition:all 0.15s;letter-spacing:0.05em}
+        .tb.on{background:rgba(255,255,255,0.09);color:#fff}
+        .tb:not(.on){color:rgba(255,255,255,0.3)}
+        .tb:not(.on):hover{color:rgba(255,255,255,0.6)}
+        .ir{display:grid;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;align-items:center;font-family:'DM Mono',monospace}
+        .ir:last-child{border:none}
+        .ch{font-size:9px;color:rgba(255,255,255,0.25);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:2px;display:grid;gap:10px}
       `}</style>
-
       <div
         style={{
-          background: "#0f0f0f",
-          border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 20,
-          width: 560,
-          maxWidth: "95vw",
-          maxHeight: "82vh",
+          background: "rgba(10,10,10,0.97)",
+          border: "1px solid rgba(255,255,255,0.08)",
+          borderRadius: 18,
+          width: 580,
+          maxWidth: "94vw",
+          maxHeight: "80vh",
           display: "flex",
           flexDirection: "column",
-          animation: "slideUp 0.25s ease",
+          animation: "slideUp 0.22s ease",
           overflow: "hidden",
+          boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
         }}
       >
         {/* Header */}
         <div
           style={{
-            padding: "20px 24px 16px",
-            borderBottom: "1px solid rgba(255,255,255,0.07)",
+            padding: "20px 22px 14px",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
             flexShrink: 0,
           }}
         >
@@ -169,17 +167,18 @@ function Modal({ config, onClose }) {
               justifyContent: "space-between",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div
                 style={{
-                  width: 36,
-                  height: 36,
+                  width: 38,
+                  height: 38,
                   borderRadius: 10,
-                  background: `${color}20`,
+                  background: `${color}18`,
+                  border: `1px solid ${color}28`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 18,
+                  fontSize: 17,
                 }}
               >
                 {icon}
@@ -187,18 +186,19 @@ function Modal({ config, onClose }) {
               <div>
                 <div
                   style={{
-                    fontSize: 16,
-                    fontWeight: 700,
+                    fontSize: 15,
+                    fontWeight: 600,
                     color: "#fff",
-                    fontFamily: "'Sora',sans-serif",
+                    fontFamily: "'DM Mono',monospace",
+                    letterSpacing: "-0.01em",
                   }}
                 >
                   {title}
                 </div>
                 <div
                   style={{
-                    fontSize: 11,
-                    color: "rgba(255,255,255,0.3)",
+                    fontSize: 10,
+                    color: "rgba(255,255,255,0.28)",
                     fontFamily: "'DM Mono',monospace",
                     marginTop: 2,
                   }}
@@ -210,59 +210,61 @@ function Modal({ config, onClose }) {
             <button
               onClick={onClose}
               style={{
-                background: "rgba(255,255,255,0.07)",
-                border: "none",
-                color: "rgba(255,255,255,0.5)",
-                width: 30,
-                height: 30,
-                borderRadius: 8,
+                background: "rgba(255,255,255,0.06)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                color: "rgba(255,255,255,0.4)",
+                width: 28,
+                height: 28,
+                borderRadius: 7,
                 cursor: "pointer",
-                fontSize: 16,
+                fontSize: 13,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                fontFamily: "'DM Mono',monospace",
               }}
             >
               ✕
             </button>
           </div>
-
-          {/* Summary pills */}
           {summaryRows?.length > 0 && (
             <div
               style={{
                 display: "flex",
                 flexWrap: "wrap",
-                gap: 8,
-                marginTop: 14,
+                gap: 6,
+                marginTop: 12,
               }}
             >
               {summaryRows.map((s) => (
                 <div
                   key={s.label}
                   style={{
-                    padding: "5px 12px",
-                    borderRadius: 20,
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.07)",
+                    padding: "4px 10px",
+                    borderRadius: 16,
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid rgba(255,255,255,0.06)",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
                   }}
                 >
                   <span
                     style={{
-                      fontSize: 10,
-                      color: "rgba(255,255,255,0.35)",
+                      fontSize: 9,
+                      color: "rgba(255,255,255,0.3)",
                       fontFamily: "'DM Mono',monospace",
-                      marginRight: 6,
+                      letterSpacing: "0.06em",
                     }}
                   >
                     {s.label}
                   </span>
                   <span
                     style={{
-                      fontSize: 12,
+                      fontSize: 11,
                       color,
                       fontWeight: 600,
-                      fontFamily: "'Sora',sans-serif",
+                      fontFamily: "'DM Mono',monospace",
                     }}
                   >
                     {s.value}
@@ -271,66 +273,60 @@ function Modal({ config, onClose }) {
               ))}
             </div>
           )}
-
-          {/* Tabs */}
           {items.length > 0 && (
-            <div style={{ display: "flex", gap: 4, marginTop: 14 }}>
+            <div style={{ display: "flex", gap: 4, marginTop: 12 }}>
               <button
-                className={`tab-btn ${tab === 0 ? "active" : ""}`}
+                className={`tb ${tab === 0 ? "on" : ""}`}
                 onClick={() => setTab(0)}
               >
-                All records
+                all
               </button>
               <button
-                className={`tab-btn ${tab === 1 ? "active" : ""}`}
+                className={`tb ${tab === 1 ? "on" : ""}`}
                 onClick={() => setTab(1)}
               >
-                Recent 5
+                recent 5
               </button>
             </div>
           )}
         </div>
-
         {/* Body */}
         <div
-          className="modal-scroll"
-          style={{ overflowY: "auto", padding: "0 24px 20px", flex: 1 }}
+          className="ms"
+          style={{ overflowY: "auto", padding: "0 22px 18px", flex: 1 }}
         >
           {items.length === 0 ? (
             <div
               style={{
                 textAlign: "center",
                 padding: "40px 0",
-                color: "rgba(255,255,255,0.25)",
+                color: "rgba(255,255,255,0.2)",
                 fontFamily: "'DM Mono',monospace",
-                fontSize: 12,
+                fontSize: 11,
               }}
             >
               {emptyMsg || "No records yet."}
             </div>
           ) : (
             <>
-              {/* Column headers */}
               <div
-                className="col-head"
+                className="ch"
                 style={{
                   gridTemplateColumns: columns
                     .map((c) => c.width || "1fr")
                     .join(" "),
-                  marginTop: 16,
+                  marginTop: 14,
                 }}
               >
                 {columns.map((c) => (
                   <span key={c.key}>{c.label}</span>
                 ))}
               </div>
-
-              {/* Rows */}
               {(tab === 1 ? [...items].reverse().slice(0, 5) : items).map(
                 (item, idx) => (
                   <div
                     key={item._id || idx}
-                    className="item-row"
+                    className="ir"
                     style={{
                       gridTemplateColumns: columns
                         .map((c) => c.width || "1fr")
@@ -340,8 +336,13 @@ function Modal({ config, onClose }) {
                     {columns.map((c) => (
                       <span
                         key={c.key}
-                        className={`cell ${c.mono ? "mono" : ""} ${c.accent ? "accent" : ""}`}
-                        style={c.accent ? { color } : {}}
+                        style={{
+                          color: c.accent ? color : "rgba(255,255,255,0.65)",
+                          fontWeight: c.accent ? 600 : 400,
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
                       >
                         {c.render ? c.render(item) : (item[c.key] ?? "—")}
                       </span>
@@ -357,7 +358,6 @@ function Modal({ config, onClose }) {
   );
 }
 
-// ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
@@ -375,36 +375,65 @@ function StatCard({
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        borderRadius: 13,
-        border: `1px solid ${hov ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.07)"}`,
-        padding: "14px 16px",
-        background: hov ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.025)",
+        borderRadius: 14,
         cursor: "pointer",
         transition: "all 0.2s",
+        border: `1px solid ${hov ? `${accent}30` : "rgba(255,255,255,0.06)"}`,
+        background: hov ? `${accent}08` : "rgba(255,255,255,0.02)",
+        padding: "16px 18px",
         position: "relative",
         overflow: "hidden",
+        boxShadow: hov ? `0 8px 32px ${accent}15` : "none",
       }}
     >
+      {/* Subtle glow blob */}
       <div
         style={{
-          width: 28,
-          height: 28,
-          borderRadius: 8,
-          background: `${accent}20`,
+          position: "absolute",
+          top: -20,
+          right: -20,
+          width: 80,
+          height: 80,
+          borderRadius: "50%",
+          background: `${accent}10`,
+          filter: "blur(20px)",
+          pointerEvents: "none",
+          opacity: hov ? 1 : 0.4,
+          transition: "opacity 0.3s",
+        }}
+      />
+      <div
+        style={{
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 10,
-          fontSize: 14,
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          marginBottom: 14,
         }}
       >
-        {icon}
+        <div
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: 8,
+            background: `${accent}15`,
+            border: `1px solid ${accent}25`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: 14,
+          }}
+        >
+          {icon}
+        </div>
+        <div style={{ opacity: 0.6 }}>
+          <Sparkline values={sparkData} color={accent} />
+        </div>
       </div>
       <div
         style={{
-          fontSize: 10,
-          color: "rgba(255,255,255,0.38)",
-          letterSpacing: "0.08em",
+          fontSize: 9,
+          color: "rgba(255,255,255,0.3)",
+          letterSpacing: "0.1em",
           textTransform: "uppercase",
           fontFamily: "'DM Mono',monospace",
         }}
@@ -413,50 +442,46 @@ function StatCard({
       </div>
       <div
         style={{
-          fontSize: 22,
+          fontSize: 20,
           fontWeight: 700,
-          color: loading ? "rgba(255,255,255,0.15)" : "#fff",
+          color: loading ? "rgba(255,255,255,0.12)" : "#fff",
           letterSpacing: "-0.02em",
           lineHeight: 1,
-          margin: "8px 0 4px",
+          margin: "6px 0 4px",
+          fontFamily: "'DM Mono',monospace",
           transition: "color 0.3s",
-          fontFamily: "'Sora',sans-serif",
         }}
       >
         {loading ? "···" : value}
       </div>
       <div
         style={{
-          fontSize: 10,
+          fontSize: 9,
           fontFamily: "'DM Mono',monospace",
-          color: "rgba(255,255,255,0.3)",
+          color: "rgba(255,255,255,0.25)",
         }}
       >
         {loading ? "loading..." : sub}
-      </div>
-      <div style={{ position: "absolute", bottom: 8, right: 10 }}>
-        <Sparkline values={sparkData} color={accent} />
       </div>
       {hov && (
         <div
           style={{
             position: "absolute",
-            bottom: 10,
-            left: 16,
-            fontSize: 9,
+            bottom: 9,
+            right: 12,
+            fontSize: 8,
             color: accent,
             fontFamily: "'DM Mono',monospace",
-            letterSpacing: "0.06em",
+            letterSpacing: "0.08em",
           }}
         >
-          CLICK TO VIEW ›
+          VIEW →
         </div>
       )}
     </div>
   );
 }
 
-// ─── Module Card ──────────────────────────────────────────────────────────────
 function ModCard({ title, sub, color, icon, badge, loading, onClick }) {
   const [hov, setHov] = useState(false);
   return (
@@ -465,16 +490,17 @@ function ModCard({ title, sub, color, icon, badge, loading, onClick }) {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        borderRadius: 13,
-        border: `1px solid ${hov ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.07)"}`,
-        padding: 16,
-        background: hov ? "rgba(255,255,255,0.05)" : "rgba(255,255,255,0.02)",
+        borderRadius: 14,
         cursor: "pointer",
         transition: "all 0.2s",
+        border: `1px solid ${hov ? `${color}30` : "rgba(255,255,255,0.06)"}`,
+        background: hov ? `${color}08` : "rgba(255,255,255,0.02)",
+        padding: "14px 16px",
+        boxShadow: hov ? `0 6px 24px ${color}12` : "none",
         transform: hov ? "translateY(-2px)" : "none",
         display: "flex",
         flexDirection: "column",
-        gap: 10,
+        gap: 12,
       }}
     >
       <div
@@ -486,25 +512,28 @@ function ModCard({ title, sub, color, icon, badge, loading, onClick }) {
       >
         <div
           style={{
-            width: 34,
-            height: 34,
+            width: 36,
+            height: 36,
             borderRadius: 10,
-            background: `${color}20`,
+            background: `${color}15`,
+            border: `1px solid ${color}25`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontSize: 17,
+            fontSize: 16,
           }}
         >
           {icon}
         </div>
         <span
           style={{
-            fontSize: 10,
+            fontSize: 9,
             fontFamily: "'DM Mono',monospace",
-            padding: "2px 8px",
+            letterSpacing: "0.06em",
+            padding: "3px 9px",
             borderRadius: 20,
-            background: `${color}20`,
+            background: `${color}15`,
+            border: `1px solid ${color}25`,
             color,
           }}
         >
@@ -514,18 +543,19 @@ function ModCard({ title, sub, color, icon, badge, loading, onClick }) {
       <div>
         <div
           style={{
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: 600,
             color: "#fff",
-            fontFamily: "'Sora',sans-serif",
+            fontFamily: "'DM Mono',monospace",
+            marginBottom: 3,
           }}
         >
           {title}
         </div>
         <div
           style={{
-            fontSize: 11,
-            color: "rgba(255,255,255,0.32)",
+            fontSize: 10,
+            color: "rgba(255,255,255,0.28)",
             fontFamily: "'DM Mono',monospace",
           }}
         >
@@ -536,7 +566,6 @@ function ModCard({ title, sub, color, icon, badge, loading, onClick }) {
   );
 }
 
-// ─── Profile Row ──────────────────────────────────────────────────────────────
 function ProfileRow({ label, value, accent, mono }) {
   return (
     <div
@@ -544,29 +573,29 @@ function ProfileRow({ label, value, accent, mono }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "8px 0",
+        padding: "7px 0",
         borderBottom: "1px solid rgba(255,255,255,0.04)",
       }}
     >
       <span
         style={{
-          fontSize: 10,
-          color: "rgba(255,255,255,0.35)",
+          fontSize: 9,
+          color: "rgba(255,255,255,0.28)",
           fontFamily: "'DM Mono',monospace",
           textTransform: "uppercase",
-          letterSpacing: "0.06em",
+          letterSpacing: "0.08em",
         }}
       >
         {label}
       </span>
       <span
         style={{
-          fontSize: mono ? 10 : 12,
-          fontFamily: mono ? "'DM Mono',monospace" : "'Sora',sans-serif",
+          fontSize: 10,
+          fontFamily: "'DM Mono',monospace",
           color:
             accent ||
-            (mono ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.8)"),
-          fontWeight: mono ? 400 : 500,
+            (mono ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.7)"),
+          fontWeight: accent ? 600 : 400,
           maxWidth: 180,
           overflow: "hidden",
           textOverflow: "ellipsis",
@@ -579,7 +608,6 @@ function ProfileRow({ label, value, accent, mono }) {
   );
 }
 
-// ─── Quick Btn ────────────────────────────────────────────────────────────────
 function QuickBtn({ label, sub, color, onClick }) {
   const [hov, setHov] = useState(false);
   return (
@@ -591,43 +619,43 @@ function QuickBtn({ label, sub, color, onClick }) {
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
-        padding: "9px 12px",
-        borderRadius: 9,
-        background: hov ? "rgba(255,255,255,0.07)" : "rgba(255,255,255,0.03)",
-        border: `1px solid ${hov ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.06)"}`,
+        padding: "8px 10px",
+        borderRadius: 8,
+        width: "100%",
+        marginBottom: 5,
+        background: hov ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.025)",
+        border: `1px solid ${hov ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)"}`,
         cursor: "pointer",
         transition: "all 0.15s",
-        width: "100%",
-        marginBottom: 6,
         textAlign: "left",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
         <div
           style={{
-            width: 7,
-            height: 7,
+            width: 6,
+            height: 6,
             borderRadius: "50%",
             background: color,
-            boxShadow: `0 0 5px ${color}88`,
+            boxShadow: `0 0 6px ${color}`,
             flexShrink: 0,
           }}
         />
         <div>
           <div
             style={{
-              fontSize: 12,
+              fontSize: 11,
               fontWeight: 500,
               color: "#fff",
-              fontFamily: "'Sora',sans-serif",
+              fontFamily: "'DM Mono',monospace",
             }}
           >
             {label}
           </div>
           <div
             style={{
-              fontSize: 10,
-              color: "rgba(255,255,255,0.3)",
+              fontSize: 9,
+              color: "rgba(255,255,255,0.28)",
               fontFamily: "'DM Mono',monospace",
             }}
           >
@@ -635,12 +663,19 @@ function QuickBtn({ label, sub, color, onClick }) {
           </div>
         </div>
       </div>
-      <span style={{ fontSize: 16, color: "rgba(255,255,255,0.2)" }}>›</span>
+      <span
+        style={{
+          fontSize: 12,
+          color: "rgba(255,255,255,0.18)",
+          fontFamily: "'DM Mono',monospace",
+        }}
+      >
+        ›
+      </span>
     </button>
   );
 }
 
-// ─── MODAL CONFIGS per module ─────────────────────────────────────────────────
 function buildModalConfig(key, data, currency) {
   const c = currency || "USD";
   switch (key) {
@@ -679,7 +714,6 @@ function buildModalConfig(key, data, currency) {
         ],
         items: data,
       };
-
     case "savings":
       return {
         title: "Savings",
@@ -715,7 +749,6 @@ function buildModalConfig(key, data, currency) {
         ],
         items: data,
       };
-
     case "bonus":
       return {
         title: "Bonuses",
@@ -751,7 +784,6 @@ function buildModalConfig(key, data, currency) {
         ],
         items: data,
       };
-
     case "expense":
       return {
         title: "Expenses",
@@ -787,7 +819,6 @@ function buildModalConfig(key, data, currency) {
         ],
         items: data,
       };
-
     case "exchangelog":
       return {
         title: "Exchange Log",
@@ -832,7 +863,6 @@ function buildModalConfig(key, data, currency) {
         ],
         items: data,
       };
-
     case "remittance":
       return {
         title: "Remittance",
@@ -879,7 +909,6 @@ function buildModalConfig(key, data, currency) {
         ],
         items: data,
       };
-
     case "plans":
       return {
         title: "Financial Plans",
@@ -926,7 +955,6 @@ function buildModalConfig(key, data, currency) {
         ],
         items: data,
       };
-
     case "notes":
       return {
         title: "Notes",
@@ -946,9 +974,10 @@ function buildModalConfig(key, data, currency) {
             key: "content",
             label: "Preview",
             width: "3fr",
-            render: (r) =>
-              (r.content || r.body || "").slice(0, 60) +
-              ((r.content || r.body || "").length > 60 ? "…" : ""),
+            render: (r) => {
+              const t = r.content || r.body || "";
+              return t.slice(0, 60) + (t.length > 60 ? "…" : "");
+            },
           },
           {
             key: "pinned",
@@ -966,18 +995,16 @@ function buildModalConfig(key, data, currency) {
         ],
         items: data,
       };
-
     default:
       return null;
   }
 }
 
-// ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 export default function Overview() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  const [modal, setModal] = useState(null); // { key, config }
+  const [modal, setModal] = useState(null);
   const [data, setData] = useState({
     salaries: [],
     savings: [],
@@ -989,7 +1016,6 @@ export default function Overview() {
     notes: [],
   });
 
-  // ── Fetch all ──
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
@@ -1005,7 +1031,6 @@ export default function Overview() {
           apiFetch("/notes"),
           apiFetch("/dashboard"),
         ]);
-
       setData({
         salaries: extract(salR),
         savings: extract(savR),
@@ -1016,7 +1041,6 @@ export default function Overview() {
         plans: extract(plnR),
         notes: extract(notR),
       });
-
       if (dashR.status === "fulfilled") {
         const v = dashR.value;
         setUser(v?.user ?? v?.data?.user ?? null);
@@ -1032,7 +1056,6 @@ export default function Overview() {
     fetchAll();
   }, [fetchAll]);
 
-  // ── Open modal ──
   const openModal = (key) => {
     const dataMap = {
       salary: data.salaries,
@@ -1048,15 +1071,12 @@ export default function Overview() {
     setModal({ key, config });
   };
 
-  const closeModal = () => setModal(null);
-
   const handleSync = async () => {
     setSyncing(true);
     await fetchAll();
     setSyncing(false);
   };
 
-  // ── Derived ──
   const cur = user?.currency || "USD";
   const totalSalary = sum(data.salaries, "amount");
   const totalSavings = sum(data.savings, "amount");
@@ -1072,62 +1092,73 @@ export default function Overview() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
-        @keyframes fsu { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
-        .fsu   { animation: fsu 0.45s ease both; }
-        .fsu-1 { animation-delay:.04s }
-        .fsu-2 { animation-delay:.10s }
-        .fsu-3 { animation-delay:.18s }
-        .fsu-4 { animation-delay:.26s }
-        .fsu-5 { animation-delay:.34s }
+        @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap');
+        *{box-sizing:border-box}
+        @keyframes fup{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        .a1{animation:fup 0.4s ease both}
+        .a2{animation:fup 0.4s 0.07s ease both}
+        .a3{animation:fup 0.4s 0.14s ease both}
+        .a4{animation:fup 0.4s 0.21s ease both}
+        .a5{animation:fup 0.4s 0.28s ease both}
+        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+        .pulse{animation:pulse 2s ease infinite}
       `}</style>
 
-      <div style={{ fontFamily: "'Sora', sans-serif", width: "100%" }}>
+      <div
+        style={{
+          fontFamily: "'DM Mono',monospace",
+          width: "100%",
+          color: "#fff",
+        }}
+      >
         {/* ── Header ── */}
         <div
-          className="fsu fsu-1"
+          className="a1"
           style={{
             display: "flex",
             alignItems: "flex-end",
             justifyContent: "space-between",
-            marginBottom: 24,
+            marginBottom: 28,
           }}
         >
           <div>
             <div
               style={{
-                fontSize: 10,
-                color: "rgba(255,255,255,0.3)",
-                letterSpacing: "0.13em",
+                fontSize: 9,
+                color: "rgba(255,255,255,0.25)",
+                letterSpacing: "0.15em",
                 textTransform: "uppercase",
+                marginBottom: 6,
                 fontFamily: "'DM Mono',monospace",
-                marginBottom: 5,
               }}
             >
-              Finance OS · Overview
+              finance_os / overview
             </div>
             <h1
               style={{
-                fontSize: 24,
-                fontWeight: 700,
+                fontSize: 22,
+                fontWeight: 500,
                 color: "#fff",
-                letterSpacing: "-0.02em",
-                lineHeight: 1.15,
+                letterSpacing: "-0.03em",
+                lineHeight: 1.1,
+                margin: 0,
+                fontFamily: "'DM Mono',monospace",
               }}
             >
-              Welcome back,{" "}
+              gm,{" "}
               <span style={{ color: "#22c55e" }}>
-                {user?.name?.split(" ")[0] || "Operator"}
+                {user?.name?.split(" ")[0] || "operator"}
               </span>
             </h1>
             <p
               style={{
-                fontSize: 12,
-                color: "rgba(255,255,255,0.32)",
+                fontSize: 10,
+                color: "rgba(255,255,255,0.25)",
                 marginTop: 5,
+                fontFamily: "'DM Mono',monospace",
               }}
             >
-              Click any card to view your records.
+              tap any card to view records
             </p>
           </div>
           <button
@@ -1137,45 +1168,51 @@ export default function Overview() {
               display: "flex",
               alignItems: "center",
               gap: 6,
-              padding: "7px 14px",
-              borderRadius: 9,
-              background: "rgba(255,255,255,0.05)",
-              border: "1px solid rgba(255,255,255,0.09)",
-              color: "rgba(255,255,255,0.55)",
-              fontSize: 11,
+              padding: "6px 14px",
+              borderRadius: 8,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              color: syncing ? "#22c55e" : "rgba(255,255,255,0.4)",
+              fontSize: 10,
               fontFamily: "'DM Mono',monospace",
               cursor: syncing ? "not-allowed" : "pointer",
-              opacity: syncing ? 0.6 : 1,
+              letterSpacing: "0.05em",
+              transition: "all 0.2s",
             }}
           >
-            {syncing ? "⟳ Syncing..." : "⟳ Sync"}
+            <span className={syncing ? "pulse" : ""}>
+              {syncing ? "◉" : "○"}
+            </span>
+            {syncing ? "syncing..." : "sync"}
           </button>
+        </div>
+
+        {/* ── Section label ── */}
+        <div
+          style={{
+            fontSize: 9,
+            color: "rgba(255,255,255,0.22)",
+            letterSpacing: "0.12em",
+            textTransform: "uppercase",
+            marginBottom: 8,
+            fontFamily: "'DM Mono',monospace",
+          }}
+        >
+          // financial_summary
         </div>
 
         {/* ── Stat Cards ── */}
         <div
+          className="a2"
           style={{
-            fontSize: 10,
-            color: "rgba(255,255,255,0.3)",
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            fontFamily: "'DM Mono',monospace",
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))",
+            gap: 8,
             marginBottom: 10,
           }}
         >
-          Financial Summary
-        </div>
-        <div
-          className="fsu fsu-2"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-            gap: 10,
-            marginBottom: 14,
-          }}
-        >
           <StatCard
-            label="Total Salary"
+            label="total_salary"
             icon="💼"
             accent="#22c55e"
             loading={loading}
@@ -1185,7 +1222,7 @@ export default function Overview() {
             onClick={() => openModal("salary")}
           />
           <StatCard
-            label="Savings"
+            label="savings"
             icon="🐖"
             accent="#38bdf8"
             loading={loading}
@@ -1195,7 +1232,7 @@ export default function Overview() {
             onClick={() => openModal("savings")}
           />
           <StatCard
-            label="Bonus"
+            label="bonus"
             icon="⭐"
             accent="#facc15"
             loading={loading}
@@ -1205,43 +1242,44 @@ export default function Overview() {
             onClick={() => openModal("bonus")}
           />
           <StatCard
-            label="Expenses"
+            label="expenses"
             icon="🧾"
             accent="#fb923c"
             loading={loading}
             value={fmt(totalExp, cur)}
-            sub={`${data.expenses.length} items logged`}
+            sub={`${data.expenses.length} items`}
             sparkData={spark(data.expenses)}
             onClick={() => openModal("expense")}
           />
         </div>
 
-        {/* ── Module Cards ── */}
+        {/* ── Section label ── */}
         <div
           style={{
-            fontSize: 10,
-            color: "rgba(255,255,255,0.3)",
+            fontSize: 9,
+            color: "rgba(255,255,255,0.22)",
             letterSpacing: "0.12em",
             textTransform: "uppercase",
+            margin: "16px 0 8px",
             fontFamily: "'DM Mono',monospace",
-            marginBottom: 10,
-            marginTop: 6,
           }}
         >
-          Modules
+          // modules
         </div>
+
+        {/* ── Module Cards ── */}
         <div
-          className="fsu fsu-3"
+          className="a3"
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))",
-            gap: 10,
-            marginBottom: 14,
+            gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+            gap: 8,
+            marginBottom: 10,
           }}
         >
           <ModCard
-            title="Exchange Log"
-            sub="Currency conversions & rates"
+            title="exchange_log"
+            sub="currency conversions & rates"
             icon="💱"
             color="#a78bfa"
             loading={loading}
@@ -1249,8 +1287,8 @@ export default function Overview() {
             onClick={() => openModal("exchangelog")}
           />
           <ModCard
-            title="Remittance"
-            sub="Money transfers & wire history"
+            title="remittance"
+            sub="transfers & wire history"
             icon="✈️"
             color="#38bdf8"
             loading={loading}
@@ -1258,8 +1296,8 @@ export default function Overview() {
             onClick={() => openModal("remittance")}
           />
           <ModCard
-            title="Plans"
-            sub="Financial goals & milestones"
+            title="plans"
+            sub="financial goals & milestones"
             icon="🎯"
             color="#22c55e"
             loading={loading}
@@ -1267,8 +1305,8 @@ export default function Overview() {
             onClick={() => openModal("plans")}
           />
           <ModCard
-            title="Notes"
-            sub="Financial journal & memos"
+            title="notes"
+            sub="journal & financial memos"
             icon="📓"
             color="#fb923c"
             loading={loading}
@@ -1279,34 +1317,34 @@ export default function Overview() {
 
         {/* ── Bottom Row ── */}
         <div
-          className="fsu fsu-4"
+          className="a4"
           style={{
             display: "grid",
             gridTemplateColumns: "1fr 1fr",
-            gap: 10,
-            marginBottom: 12,
+            gap: 8,
+            marginBottom: 10,
           }}
         >
-          {/* Profile */}
+          {/* Account */}
           <div
             style={{
-              borderRadius: 13,
-              border: "1px solid rgba(255,255,255,0.07)",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.06)",
               padding: 16,
               background: "rgba(255,255,255,0.02)",
             }}
           >
             <div
               style={{
-                fontSize: 10,
-                color: "rgba(255,255,255,0.3)",
+                fontSize: 9,
+                color: "rgba(255,255,255,0.22)",
                 letterSpacing: "0.12em",
                 textTransform: "uppercase",
+                marginBottom: 14,
                 fontFamily: "'DM Mono',monospace",
-                marginBottom: 12,
               }}
             >
-              Account
+              // account
             </div>
             <div
               style={{
@@ -1314,105 +1352,113 @@ export default function Overview() {
                 alignItems: "center",
                 gap: 10,
                 paddingBottom: 12,
-                borderBottom: "1px solid rgba(255,255,255,0.06)",
-                marginBottom: 4,
+                borderBottom: "1px solid rgba(255,255,255,0.05)",
+                marginBottom: 6,
               }}
             >
               <div
                 style={{
-                  width: 38,
-                  height: 38,
+                  width: 36,
+                  height: 36,
                   borderRadius: "50%",
-                  background: "linear-gradient(135deg,#22c55e22,#22c55e44)",
-                  color: "#22c55e",
-                  border: "1px solid #22c55e33",
+                  background: "rgba(34,197,94,0.12)",
+                  border: "1px solid rgba(34,197,94,0.2)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontWeight: 700,
+                  color: "#22c55e",
+                  fontWeight: 600,
                   fontSize: 14,
+                  fontFamily: "'DM Mono',monospace",
                 }}
               >
                 {user?.name?.[0]?.toUpperCase() || "U"}
               </div>
               <div>
-                <div style={{ fontSize: 13, fontWeight: 600, color: "#fff" }}>
-                  {user?.name || "Your Name"}
-                </div>
                 <div
                   style={{
-                    fontSize: 10,
-                    color: "rgba(255,255,255,0.3)",
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: "#fff",
                     fontFamily: "'DM Mono',monospace",
                   }}
                 >
-                  Personal Account
+                  {user?.name || "your_name"}
+                </div>
+                <div
+                  style={{
+                    fontSize: 9,
+                    color: "rgba(255,255,255,0.25)",
+                    fontFamily: "'DM Mono',monospace",
+                  }}
+                >
+                  personal account
                 </div>
               </div>
             </div>
-            <ProfileRow label="Email" value={user?.email} />
+            <ProfileRow label="email" value={user?.email} />
             <ProfileRow
-              label="Currency"
+              label="currency"
               value={user?.currency || "USD"}
               accent="#22c55e"
             />
-            <ProfileRow label="Theme" value={user?.theme || "Obsidian"} />
-            <ProfileRow label="User ID" value={user?._id} mono />
+            <ProfileRow label="theme" value={user?.theme || "obsidian"} />
+            <ProfileRow label="user_id" value={user?._id} mono />
           </div>
 
-          {/* Quick Actions — all open popups */}
+          {/* Quick View */}
           <div
             style={{
-              borderRadius: 13,
-              border: "1px solid rgba(255,255,255,0.07)",
+              borderRadius: 14,
+              border: "1px solid rgba(255,255,255,0.06)",
               padding: 16,
               background: "rgba(255,255,255,0.02)",
             }}
           >
             <div
               style={{
-                fontSize: 10,
-                color: "rgba(255,255,255,0.3)",
+                fontSize: 9,
+                color: "rgba(255,255,255,0.22)",
                 letterSpacing: "0.12em",
                 textTransform: "uppercase",
-                fontFamily: "'DM Mono',monospace",
                 marginBottom: 12,
+                fontFamily: "'DM Mono',monospace",
               }}
             >
-              Quick View
+              // quick_view
             </div>
             <QuickBtn
-              label="Salary Records"
+              label="salary_records"
               sub={`${data.salaries.length} entries`}
               color="#22c55e"
               onClick={() => openModal("salary")}
             />
             <QuickBtn
-              label="Expense Records"
+              label="expense_records"
               sub={`${data.expenses.length} items`}
               color="#fb923c"
               onClick={() => openModal("expense")}
             />
             <QuickBtn
-              label="Remittances"
+              label="remittances"
               sub={`${data.remittances.length} transfers`}
               color="#38bdf8"
               onClick={() => openModal("remittance")}
             />
             <QuickBtn
-              label="Plans"
+              label="plans"
               sub={`${data.plans.length} goals`}
               color="#a78bfa"
               onClick={() => openModal("plans")}
             />
             <QuickBtn
-              label="Exchange Log"
+              label="exchange_log"
               sub={`${data.exchangelogs.length} conversions`}
               color="#facc15"
               onClick={() => openModal("exchangelog")}
             />
             <QuickBtn
-              label="Notes"
+              label="notes"
               sub={`${data.notes.length} notes`}
               color="#fb923c"
               onClick={() => openModal("notes")}
@@ -1422,42 +1468,45 @@ export default function Overview() {
 
         {/* ── Session Bar ── */}
         <div
-          className="fsu fsu-5"
+          className="a5"
           style={{
             display: "flex",
             alignItems: "center",
             gap: 8,
             padding: "8px 14px",
-            borderRadius: 10,
-            background: "rgba(255,255,255,0.012)",
-            border: "1px solid rgba(255,255,255,0.05)",
+            borderRadius: 8,
+            background: "rgba(255,255,255,0.01)",
+            border: "1px solid rgba(255,255,255,0.04)",
           }}
         >
           <div
             style={{
-              width: 6,
-              height: 6,
+              width: 5,
+              height: 5,
               borderRadius: "50%",
               background: "#22c55e",
-              boxShadow: "0 0 4px #22c55e",
+              boxShadow: "0 0 5px #22c55e",
               flexShrink: 0,
             }}
+            className="pulse"
           />
-          <span
-            style={{
-              fontSize: 10,
-              color: "rgba(255,255,255,0.28)",
-              fontFamily: "'DM Mono',monospace",
-            }}
-          >
-            Session active · JWT authenticated · {now}
-          </span>
           <span
             style={{
               fontSize: 9,
               color: "rgba(255,255,255,0.22)",
               fontFamily: "'DM Mono',monospace",
+              letterSpacing: "0.05em",
+            }}
+          >
+            session_active · jwt_authenticated · {now}
+          </span>
+          <span
+            style={{
+              fontSize: 8,
+              color: "rgba(255,255,255,0.15)",
+              fontFamily: "'DM Mono',monospace",
               marginLeft: "auto",
+              letterSpacing: "0.1em",
             }}
           >
             LIVE
@@ -1465,8 +1514,7 @@ export default function Overview() {
         </div>
       </div>
 
-      {/* ── Modal Popup ── */}
-      {modal && <Modal config={modal.config} onClose={closeModal} />}
+      {modal && <Modal config={modal.config} onClose={() => setModal(null)} />}
     </>
   );
 }

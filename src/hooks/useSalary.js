@@ -4,27 +4,23 @@ import { salaryApi } from "../api/salaryApi";
 
 const _now = new Date();
 export const MAX_YEAR = _now.getFullYear();
-export const MAX_MONTH = _now.getMonth() + 1;
-
-export const isFuture = (month, year) =>
-  year > MAX_YEAR || (year === MAX_YEAR && month > MAX_MONTH);
 
 export function useSalary() {
   const { syncHeaders, addNotice } = useFinance();
 
   const [curYear, setCurYear] = useState(MAX_YEAR);
-  const [curMonth, setCurMonth] = useState(MAX_MONTH);
   const [records, setRecords] = useState([]);
   const [salaryStats, setSalaryStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // ── Fetch ──────────────────────────────────────────────────────────────
+  // ── Fetch all records by Year ───────────────────────────────────────────
   const fetchAll = useCallback(
-    async (year, month) => {
+    async (year) => {
       setLoading(true);
       try {
-        const data = await salaryApi.getAll(year, month, syncHeaders());
+        // Updated API call to ignore month constraints
+        const data = await salaryApi.getAll(year, syncHeaders());
         if (data.success) {
           setRecords(data.data);
           setSalaryStats(data.stats ?? null);
@@ -40,30 +36,16 @@ export function useSalary() {
     [syncHeaders, addNotice],
   );
 
+  // Inside useSalary.js
   useEffect(() => {
-    fetchAll(curYear, curMonth);
-  }, [curYear, curMonth, fetchAll]);
-
-  // ── Month navigation ───────────────────────────────────────────────────
-  const goMonth = (delta) => {
-    let m = curMonth + delta,
-      y = curYear;
-    if (m < 1) {
-      m = 12;
-      y--;
+    // Coerce to a hard Number to guarantee object types are completely stripped out
+    if (curYear) {
+      fetchAll(Number(curYear));
     }
-    if (m > 12) {
-      m = 1;
-      y++;
-    }
-    if (isFuture(m, y)) return;
-    setCurMonth(m);
-    setCurYear(y);
-  };
+  }, [curYear, fetchAll]);
 
-  const handleDateJump = (month, year) => {
-    if (isFuture(month, year)) return;
-    setCurMonth(month);
+  const handleYearJump = (year) => {
+    if (year > MAX_YEAR) return;
     setCurYear(year);
   };
 
@@ -96,7 +78,7 @@ export function useSalary() {
             : "Salary record added successfully.",
           "success",
         );
-        await fetchAll(curYear, curMonth);
+        await fetchAll(curYear);
         return true;
       } else {
         addNotice(data.message || "Operation failed.", "error");
@@ -116,7 +98,7 @@ export function useSalary() {
       const data = await salaryApi.remove(id, syncHeaders());
       if (data.success) {
         addNotice("Record deleted permanently.", "success");
-        await fetchAll(curYear, curMonth);
+        await fetchAll(curYear);
         return true;
       } else {
         addNotice(data.message || "Delete failed.", "error");
@@ -134,23 +116,18 @@ export function useSalary() {
     records.reduce((s, r) => s + (r.amountUSD || 0), 0);
   const disbursed = records.filter((r) => r.status === "Disbursed").length;
   const confirmed = records.filter((r) => r.status === "Confirmed").length;
-  const thisYear = records.filter((r) => r.year === MAX_YEAR).length;
+  const thisYearRecordsCount = records.filter(
+    (r) => r.year === MAX_YEAR,
+  ).length;
 
   return {
-    // state
     curYear,
-    curMonth,
     records,
     loading,
     submitting,
-    // navigation
-    goMonth,
-    handleDateJump,
-    isCurrentMonth: curYear === MAX_YEAR && curMonth === MAX_MONTH,
-    // actions
+    handleYearJump,
     saveRecord,
     deleteRecord,
-    // derived
-    stats: { totalUSD, disbursed, confirmed, thisYear },
+    stats: { totalUSD, disbursed, confirmed, thisYear: thisYearRecordsCount },
   };
 }

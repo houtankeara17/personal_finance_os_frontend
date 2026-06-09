@@ -1,10 +1,20 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useFinance } from "../context/FinanceContext";
-import { bonusApi } from "../api/bonusApi";
+import { plansApi } from "../api/planApi";
 
 const _now = new Date();
 export const MAX_YEAR = _now.getFullYear();
 export const MAX_MONTH = _now.getMonth() + 1;
+
+export const CURRENCIES = ["USD", "KHR", "THB"];
+export const STATUSES = ["Dreaming", "Active Allocation", "Accomplished"];
+export const PRIORITIES = ["Low", "Medium", "High"];
+
+export const YEAR_OPTIONS = Array.from(
+  { length: MAX_YEAR - 2025 + 10 }, // Extended into the future for better navigation range
+  (_, i) => 2025 + i,
+);
+
 export const MONTHS = [
   "January",
   "February",
@@ -19,65 +29,66 @@ export const MONTHS = [
   "November",
   "December",
 ];
-export const RATES = { USD: 1, KHR: 4000, THB: 35 };
 
 export const isFuture = (month, year) =>
   year > MAX_YEAR || (year === MAX_YEAR && month > MAX_MONTH);
 
-export function useBonus() {
+export const emptyForm = {
+  title: "",
+  description: "",
+  targetAmount: "",
+  currency: "USD",
+  currentFunding: "",
+  targetDate: "",
+  status: "Dreaming",
+  priority: "Medium",
+  images: [],
+  noted: "",
+};
+
+export function usePlans() {
   const { syncHeaders, addNotice } = useFinance();
 
   const [curYear, setCurYear] = useState(MAX_YEAR);
   const [curMonth, setCurMonth] = useState(MAX_MONTH);
+  const [viewMode, setViewMode] = useState("TABLE"); // Managed Multi-View State
   const [records, setRecords] = useState([]);
-  const [monthlySalary, setMonthlySalary] = useState(0);
+  const [planStats, setPlanStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [editTarget, setEditTarget] = useState(null);
+  const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
+  const [imagePreviews, setImagePreviews] = useState([]);
 
-  // ── Fetch all bonuses ────────────────────────────────────────────────────
-  const fetchAll = useCallback(async () => {
+  const fetchAll = async (year, month) => {
     setLoading(true);
     try {
-      const data = await bonusApi.getAll(syncHeaders());
-      if (data.success) setRecords(data.data);
-      else addNotice(data.message || "Failed to load bonus records.", "error");
+      const data = await plansApi.fetchPlans(year, month, syncHeaders);
+      if (data.success) {
+        setRecords(data.data);
+        setPlanStats(data.stats ?? null);
+      } else {
+        addNotice(data.message || "Failed to load plans.", "error");
+      }
     } catch {
-      addNotice("Network error: Failed to reach bonus system.", "error");
+      addNotice("Network error: Could not reach server.", "error");
     } finally {
       setLoading(false);
     }
-  }, [syncHeaders, addNotice]);
-
-  // ── Fetch salary for current month ───────────────────────────────────────
-  const fetchSalary = useCallback(async () => {
-    try {
-      const data = await bonusApi.getSalaryForMonth(
-        curYear,
-        curMonth,
-        syncHeaders(),
-      );
-      if (data.success && data.data?.length > 0) {
-        const latest = data.data[0];
-        setMonthlySalary(latest.amountUSD ?? latest.amount ?? 0);
-      } else {
-        setMonthlySalary(0);
-      }
-    } catch {
-      setMonthlySalary(0);
-    }
-  }, [curYear, curMonth, syncHeaders]);
+  };
 
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
-  useEffect(() => {
-    fetchSalary();
-  }, [fetchSalary]);
+    fetchAll(curYear, curMonth);
+  }, [curYear, curMonth]);
 
-  // ── Month navigation ─────────────────────────────────────────────────────
+  const isCurrentMonth = curYear === MAX_YEAR && curMonth === MAX_MONTH;
+
   const goMonth = (delta) => {
-    let m = curMonth + delta,
-      y = curYear;
+    let m = curMonth + delta;
+    let y = curYear;
     if (m < 1) {
       m = 12;
       y--;
@@ -86,121 +97,193 @@ export function useBonus() {
       m = 1;
       y++;
     }
-    if (isFuture(m, y)) return;
+    // Future restriction removed completely
     setCurMonth(m);
     setCurYear(y);
   };
 
   const handleDateJump = (month, year) => {
-    if (isFuture(month, year)) return;
+    // Future restriction removed completely
     setCurMonth(month);
     setCurYear(year);
   };
 
-  // ── Create / Update ──────────────────────────────────────────────────────
-  const saveRecord = async (form, editId = null) => {
-    if (!form.amount || isNaN(form.amount) || Number(form.amount) <= 0) {
-      addNotice("Enter a valid amount.", "error");
-      return false;
+  const openCreate = () => {
+    setEditTarget(null);
+    setForm(emptyForm);
+    setImagePreviews([]);
+    setShowModal(true);
+  };
+
+  const openEdit = (rec) => {
+    setEditTarget(rec._id);
+    setForm({
+      title: rec.title,
+      description: rec.description || "",
+      targetAmount: rec.targetAmount,
+      currency: rec.currency,
+      currentFunding: rec.currentFunding || 0,
+      targetDate: rec.targetDate
+        ? new Date(rec.targetDate).toISOString().split("T")[0]
+        : "",
+      status: rec.status,
+      priority: rec.priority,
+      images: rec.images || [],
+      noted: rec.noted || "",
+    });
+    setImagePreviews(rec.images || []);
+    setShowModal(true);
+  };
+
+  const handleFilesChange = (e) => {
+    const files = Array.from(e.target.files);
+    files.forEach((file) => {
+      if (file.size > 3 * 1024 * 1024)
+        return addNotice("Images must be under 3MB.", "error");
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreviews((prev) => [...prev, reader.result]);
+        setForm((f) => ({ ...f, images: [...f.images, reader.result] }));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (idx) => {
+    setImagePreviews((prev) => prev.filter((_, i) => i !== idx));
+    setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
+  };
+
+  const handleSubmit = async () => {
+    if (!form.title.trim()) return addNotice("Title is required.", "error");
+    if (
+      !form.targetAmount ||
+      isNaN(form.targetAmount) ||
+      Number(form.targetAmount) <= 0
+    ) {
+      return addNotice("Enter a valid target amount.", "error");
     }
 
     setSubmitting(true);
     try {
-      const numAmount = Number(form.amount);
-      const amountUSD = numAmount / RATES[form.currency];
-      const payload = { ...form, amount: numAmount, amountUSD };
+      const num = Number(form.targetAmount);
+      const targetAmountUSD =
+        form.currency === "KHR"
+          ? num / 4000
+          : form.currency === "THB"
+            ? num / 35
+            : num;
 
-      const data = editId
-        ? await bonusApi.update(editId, payload, syncHeaders())
-        : await bonusApi.create(payload, syncHeaders());
+      const payload = {
+        ...form,
+        targetAmount: num,
+        targetAmountUSD,
+        currentFunding: Number(form.currentFunding) || 0,
+      };
+
+      const data = editTarget
+        ? await plansApi.updatePlan(editTarget, payload, syncHeaders)
+        : await plansApi.createPlan(payload, syncHeaders);
 
       if (data.success) {
         addNotice(
-          editId
-            ? "Bonus record updated seamlessly."
-            : "Bonus record added successfully.",
+          editTarget
+            ? "Plan updated successfully."
+            : "Plan created successfully.",
           "success",
         );
-        // jump view to the month of the saved record
-        if (!isFuture(form.monthNumber, form.year)) {
-          setCurMonth(form.monthNumber);
-          setCurYear(form.year);
-        }
-        await fetchAll();
-        return true;
+        setShowModal(false);
+        fetchAll(curYear, curMonth);
       } else {
         addNotice(data.message || "Operation failed.", "error");
-        return false;
       }
     } catch {
-      addNotice("Server error: Failed to save bonus record.", "error");
-      return false;
+      addNotice("Server error: Failed to save plan.", "error");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // ── Delete ───────────────────────────────────────────────────────────────
-  const deleteRecord = async (id) => {
+  const handleDelete = async (id) => {
     try {
-      const data = await bonusApi.remove(id, syncHeaders());
+      const data = await plansApi.deletePlan(id, syncHeaders);
       if (data.success) {
-        addNotice("Bonus record purged successfully.", "success");
-        await fetchAll();
-        return true;
+        addNotice("Plan deleted permanently.", "success");
+        fetchAll(curYear, curMonth);
       } else {
         addNotice(data.message || "Delete failed.", "error");
-        return false;
       }
     } catch {
-      addNotice("Server error during deletion.", "error");
-      return false;
+      addNotice("Server error: Could not complete deletion.", "error");
+    } finally {
+      setDeleteId(null);
     }
   };
 
-  // ── Derived stats ────────────────────────────────────────────────────────
-  const monthRecords = records.filter(
-    (r) => r.year === curYear && r.monthNumber === curMonth,
-  );
-  const thisYear = records.filter((r) => r.year === curYear);
-  const totalUSD = records.reduce((s, r) => s + (r.amountUSD || 0), 0);
-  const thisYearUSD = thisYear.reduce((s, r) => s + (r.amountUSD || 0), 0);
-  const monthBonusUSD = monthRecords.reduce(
-    (s, r) => s + (r.amountUSD || 0),
-    0,
-  );
-  const disbursed = records.filter((r) => r.status === "Disbursed").length;
-  const totalComp = monthlySalary + monthBonusUSD;
-  const salaryRatio =
-    monthlySalary > 0
-      ? ((monthBonusUSD / monthlySalary) * 100).toFixed(1)
-      : null;
+  const handleDeleteAll = async () => {
+    try {
+      const results = await Promise.all(
+        records.map((rec) => plansApi.deletePlan(rec._id, syncHeaders)),
+      );
+      const failed = results.filter((r) => !r.success).length;
+      if (failed > 0) {
+        addNotice(`${failed} record(s) failed to delete.`, "error");
+      } else {
+        addNotice("All plans deleted permanently.", "success");
+      }
+      fetchAll(curYear, curMonth);
+    } catch {
+      addNotice("Server error: Could not complete deletion.", "error");
+    } finally {
+      setShowDeleteAll(false);
+    }
+  };
+
+  // Derived metrics
+  const totalTarget =
+    planStats?.totalTargetUSD ??
+    records.reduce((s, r) => s + (r.targetAmountUSD || 0), 0);
+  const totalFunded =
+    planStats?.totalFunded ??
+    records.reduce((s, r) => s + (r.currentFunding || 0), 0);
+  const accomplished = records.filter(
+    (r) => r.status === "Accomplished",
+  ).length;
+  const active = records.filter((r) => r.status === "Active Allocation").length;
 
   return {
-    // state
     curYear,
     curMonth,
+    viewMode,
+    setViewMode,
     records,
-    monthlySalary,
     loading,
+    showModal,
+    editTarget,
+    form,
     submitting,
-    // navigation
+    deleteId,
+    showDeleteAll,
+    imagePreviews,
+    isCurrentMonth,
+    totalTarget,
+    totalFunded,
+    accomplished,
+    active,
+    setCurYear,
+    setCurMonth,
+    setForm,
+    setShowModal,
+    setDeleteId,
+    setShowDeleteAll,
     goMonth,
     handleDateJump,
-    isCurrentMonth: curYear === MAX_YEAR && curMonth === MAX_MONTH,
-    // actions
-    saveRecord,
-    deleteRecord,
-    // derived
-    stats: {
-      totalUSD,
-      thisYearUSD,
-      thisYearCount: thisYear.length,
-      disbursed,
-      monthBonusUSD,
-      totalComp,
-      salaryRatio,
-      monthRecords,
-    },
+    openCreate,
+    openEdit,
+    handleFilesChange,
+    removeImage,
+    handleSubmit,
+    handleDelete,
+    handleDeleteAll,
   };
 }

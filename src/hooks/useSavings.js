@@ -28,6 +28,7 @@ export function useSavings() {
 
   // ── Delete ──
   const [deleteId, setDeleteId] = useState(null);
+  const [showDeleteAll, setShowDeleteAll] = useState(false);
 
   // ── Filter ──
   const [filterCat, setFilterCat] = useState("ALL");
@@ -113,6 +114,9 @@ export function useSavings() {
 
   const closeModal = () => setShowModal(false);
 
+  // ── Exchange rates (USD base) ──
+  const RATES = { USD: 1, KHR: 4100, THB: 36 };
+
   // ── Submit ──
   const handleSubmit = async () => {
     if (!form.amount || isNaN(form.amount) || Number(form.amount) <= 0)
@@ -120,7 +124,9 @@ export function useSavings() {
 
     setSubmitting(true);
     try {
-      const payload = { ...form, amount: Number(form.amount) };
+      const amt = Number(form.amount);
+      const amountUSD = +(amt / (RATES[form.currency] || 1)).toFixed(2);
+      const payload = { ...form, amount: amt, amountUSD };
       const data = editTarget
         ? await savingsApi.update(syncHeaders(), editTarget, payload)
         : await savingsApi.create(syncHeaders(), payload);
@@ -141,7 +147,7 @@ export function useSavings() {
     }
   };
 
-  // ── Delete ──
+  // ── Delete single ──
   const handleDelete = async (id) => {
     try {
       const data = await savingsApi.remove(syncHeaders(), id);
@@ -155,6 +161,23 @@ export function useSavings() {
       addNotice("Server error.", "error");
     } finally {
       setDeleteId(null);
+    }
+  };
+
+  // ── Delete all ──
+  const handleDeleteAll = async () => {
+    try {
+      const data = await savingsApi.removeAll(syncHeaders());
+      if (data.success) {
+        addNotice(data.message || "All records deleted.");
+        fetchAll();
+      } else {
+        addNotice(data.message || "Delete all failed.", "error");
+      }
+    } catch {
+      addNotice("Server error.", "error");
+    } finally {
+      setShowDeleteAll(false);
     }
   };
 
@@ -220,9 +243,13 @@ export function useSavings() {
     openEdit,
     closeModal,
     handleSubmit,
-    // delete
+    // delete single
     deleteId,
     setDeleteId,
     handleDelete,
+    // delete all
+    showDeleteAll,
+    setShowDeleteAll,
+    handleDeleteAll,
   };
 }

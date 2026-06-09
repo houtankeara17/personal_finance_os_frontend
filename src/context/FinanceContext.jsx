@@ -1,3 +1,4 @@
+// ✅ Correct — all imports first
 import React, { createContext, useContext, useState, useEffect } from "react";
 import BASE_URL from "../api/config";
 
@@ -178,7 +179,7 @@ export const FinanceProvider = ({ children }) => {
     }
   };
 
-  const updateProfile = async (payload) => {
+  const updateProfileSettings = async (payload) => {
     try {
       const res = await fetch(`${BASE_URL}/api/auth/profile`, {
         method: "PUT",
@@ -231,7 +232,7 @@ export const FinanceProvider = ({ children }) => {
         executeLogin,
         executeRegister,
         executeOAuthSuccess,
-        updateProfile,
+        updateProfileSettings,
         logOut,
         addNotice,
         triggerFetchCycle,

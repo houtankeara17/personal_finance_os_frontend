@@ -4,7 +4,7 @@ import { bonusApi } from "../api/bonusApi";
 
 const _now = new Date();
 export const MAX_YEAR = _now.getFullYear();
-export const MAX_MONTH = _now.getMonth() + 1;
+export const MAX_MONTH = _now.getMonth() + 1; // Current real-world month (6 for June)
 export const MONTHS = [
   "January",
   "February",
@@ -21,14 +21,10 @@ export const MONTHS = [
 ];
 export const RATES = { USD: 1, KHR: 4000, THB: 35 };
 
-export const isFuture = (month, year) =>
-  year > MAX_YEAR || (year === MAX_YEAR && month > MAX_MONTH);
-
 export function useBonus() {
   const { syncHeaders, addNotice } = useFinance();
 
   const [curYear, setCurYear] = useState(MAX_YEAR);
-  const [curMonth, setCurMonth] = useState(MAX_MONTH);
   const [records, setRecords] = useState([]);
   const [monthlySalary, setMonthlySalary] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -48,52 +44,49 @@ export function useBonus() {
     }
   }, [syncHeaders, addNotice]);
 
-  // ── Fetch salary for current month ───────────────────────────────────────
-  const fetchSalary = useCallback(async () => {
-    try {
-      const data = await bonusApi.getSalaryForMonth(
-        curYear,
-        curMonth,
-        syncHeaders(),
-      );
-      if (data.success && data.data?.length > 0) {
-        const latest = data.data[0];
-        setMonthlySalary(latest.amountUSD ?? latest.amount ?? 0);
-      } else {
+  // ── Fetch salary dynamically based on Year and Month ──────────────────────
+  // ⭐️ FIXED: Changed from hardcoded MAX_MONTH to accept target parameters
+  const fetchSalary = useCallback(
+    async (targetYear = curYear, targetMonth = MAX_MONTH) => {
+      try {
+        const data = await bonusApi.getSalaryForMonth(
+          Number(targetYear),
+          Number(targetMonth),
+          syncHeaders(),
+        );
+
+        if (data.success && data.data?.length > 0) {
+          const latest = data.data[0];
+          setMonthlySalary(latest.amountUSD ?? latest.amount ?? 0);
+        } else {
+          setMonthlySalary(0); // Set to 0 if no record exists for this specific month/year
+        }
+      } catch {
         setMonthlySalary(0);
       }
-    } catch {
-      setMonthlySalary(0);
-    }
-  }, [curYear, curMonth, syncHeaders]);
+    },
+    [curYear, syncHeaders],
+  );
 
+  // ── Auto-Fetch effects on mount/year changes ─────────────────────────────
   useEffect(() => {
     fetchAll();
   }, [fetchAll]);
-  useEffect(() => {
-    fetchSalary();
-  }, [fetchSalary]);
 
-  // ── Month navigation ─────────────────────────────────────────────────────
-  const goMonth = (delta) => {
-    let m = curMonth + delta,
-      y = curYear;
-    if (m < 1) {
-      m = 12;
-      y--;
-    }
-    if (m > 12) {
-      m = 1;
-      y++;
-    }
-    if (isFuture(m, y)) return;
-    setCurMonth(m);
-    setCurYear(y);
+  useEffect(() => {
+    // Default dashboard loading behavior (loads current year and current month salary)
+    fetchSalary(curYear, MAX_MONTH);
+  }, [fetchSalary, curYear]);
+
+  // ── Year navigation ──────────────────────────────────────────────────────
+  const goYear = (delta) => {
+    const newYear = curYear + delta;
+    if (newYear > MAX_YEAR) return;
+    setCurYear(newYear);
   };
 
-  const handleDateJump = (month, year) => {
-    if (isFuture(month, year)) return;
-    setCurMonth(month);
+  const handleYearJump = (year) => {
+    if (year > MAX_YEAR) return;
     setCurYear(year);
   };
 
@@ -121,9 +114,7 @@ export function useBonus() {
             : "Bonus record added successfully.",
           "success",
         );
-        // jump view to the month of the saved record
-        if (!isFuture(form.monthNumber, form.year)) {
-          setCurMonth(form.monthNumber);
+        if (form.year <= MAX_YEAR) {
           setCurYear(form.year);
         }
         await fetchAll();
@@ -158,49 +149,39 @@ export function useBonus() {
     }
   };
 
-  // ── Derived stats ────────────────────────────────────────────────────────
-  const monthRecords = records.filter(
-    (r) => r.year === curYear && r.monthNumber === curMonth,
-  );
-  const thisYear = records.filter((r) => r.year === curYear);
+  // ── Derived stats (year-scoped) ──────────────────────────────────────────
+  const yearRecords = records.filter((r) => r.year === curYear);
   const totalUSD = records.reduce((s, r) => s + (r.amountUSD || 0), 0);
-  const thisYearUSD = thisYear.reduce((s, r) => s + (r.amountUSD || 0), 0);
-  const monthBonusUSD = monthRecords.reduce(
-    (s, r) => s + (r.amountUSD || 0),
-    0,
-  );
+  const thisYearUSD = yearRecords.reduce((s, r) => s + (r.amountUSD || 0), 0);
   const disbursed = records.filter((r) => r.status === "Disbursed").length;
-  const totalComp = monthlySalary + monthBonusUSD;
+  const yearBonusUSD = thisYearUSD;
+  const totalComp = monthlySalary + yearBonusUSD;
   const salaryRatio =
     monthlySalary > 0
-      ? ((monthBonusUSD / monthlySalary) * 100).toFixed(1)
+      ? ((yearBonusUSD / monthlySalary) * 100).toFixed(1)
       : null;
 
   return {
-    // state
     curYear,
-    curMonth,
     records,
-    monthlySalary,
+    monthlySalary, // ⭐️ This value updates whenever fetchSalary handles a switch
     loading,
     submitting,
-    // navigation
-    goMonth,
-    handleDateJump,
-    isCurrentMonth: curYear === MAX_YEAR && curMonth === MAX_MONTH,
-    // actions
+    goYear,
+    handleYearJump,
+    isCurrentYear: curYear === MAX_YEAR,
     saveRecord,
     deleteRecord,
-    // derived
+    fetchSalary, // ⭐️ EXPOSED: Your modal component can now invoke this directly!
     stats: {
       totalUSD,
       thisYearUSD,
-      thisYearCount: thisYear.length,
+      thisYearCount: yearRecords.length,
       disbursed,
-      monthBonusUSD,
+      yearBonusUSD,
       totalComp,
       salaryRatio,
-      monthRecords,
+      yearRecords,
     },
   };
 }

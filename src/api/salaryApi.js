@@ -3,10 +3,14 @@ import BASE_URL from "./config";
 const BASE = `${BASE_URL}/api/salaries`;
 
 export const salaryApi = {
-  getAll: (year, month, headers) =>
-    fetch(`${BASE}?year=${year}&monthNumber=${month}`, { headers }).then((r) =>
-      r.json(),
-    ),
+  // Expected layout inside your salaryApi.js file
+  getAll: async (year, headers) => {
+    const response = await fetch(`${BASE}?year=${year}`, {
+      method: "GET",
+      headers: headers, // Ensure this isn't blank!
+    });
+    return response.json();
+  },
 
   create: (payload, headers) =>
     fetch(BASE, {
