@@ -27,16 +27,8 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch(`${BASE_URL}/api/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      }).then((r) => r.json());
-
+      const res = await executeLogin(email, password);
       if (res.success) {
-        localStorage.setItem("token", res.token);
-        localStorage.setItem("user", JSON.stringify(res.user));
-        await executeLogin(email, password);
         navigate("/");
       } else {
         setError(res.message || "Login failed. Please try again.");

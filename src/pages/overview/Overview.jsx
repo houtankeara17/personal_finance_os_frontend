@@ -1,96 +1,31 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState } from "react";
+import { useFinanceData } from "../../hooks/useFinanceData";
+import { fmt, fmtDate, sum, spark } from "../../api/overviewApi";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
-
-async function apiFetch(path) {
-  const token = localStorage.getItem("token");
-  const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-  });
-  if (!res.ok) throw new Error(`${res.status}`);
-  return res.json();
-}
-
-function fmt(val, currency = "USD") {
-  if (val == null || isNaN(Number(val))) return "$0.00";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(
-    val,
-  );
-}
-
-function fmtDate(d) {
-  if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function sum(arr = [], key = "amount") {
-  return arr.reduce((acc, item) => acc + (parseFloat(item?.[key]) || 0), 0);
-}
-
-function spark(arr, key = "amount") {
-  const vals = arr.slice(-7).map((i) => parseFloat(i?.[key]) || 0);
-  return vals.length ? vals : [0, 0, 0, 0, 0, 0, 0];
-}
-
-function extract(res) {
-  if (res.status !== "fulfilled") return [];
-  const v = res.value;
-  if (Array.isArray(v)) return v;
-  for (const key of [
-    "data",
-    "salaries",
-    "savings",
-    "bonuses",
-    "expenses",
-    "exchangelogs",
-    "exchangelog",
-    "remittances",
-    "plans",
-    "notes",
-    "items",
-    "results",
-  ]) {
-    if (Array.isArray(v?.[key])) return v[key];
-  }
-  return [];
-}
-
+// ─── Sparkline ────────────────────────────────────────────────────────────────
 function Sparkline({ values = [], color = "#22c55e" }) {
   const v = values.length ? values : [0, 0, 0, 0, 0, 0, 0];
   const max = Math.max(...v),
     min = Math.min(...v);
-  const h = 28,
-    w = 72;
+  const h = 26,
+    w = 64;
   const pts = v.map((val, i) => {
     const x = (i / (v.length - 1)) * w;
     const y = h - ((val - min) / (max - min || 1)) * h;
     return `${x},${y}`;
   });
+  const id = `g${color.replace("#", "")}`;
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} fill="none">
       <defs>
-        <linearGradient
-          id={`sg-${color.replace("#", "")}`}
-          x1="0"
-          y1="0"
-          x2="0"
-          y2="1"
-        >
-          <stop offset="0%" stopColor={color} stopOpacity="0.25" />
+        <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.18" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
       <polygon
         points={`0,${h} ${pts.join(" ")} ${w},${h}`}
-        fill={`url(#sg-${color.replace("#", "")})`}
+        fill={`url(#${id})`}
       />
       <polyline
         points={pts.join(" ")}
@@ -100,14 +35,22 @@ function Sparkline({ values = [], color = "#22c55e" }) {
         strokeLinecap="round"
         fill="none"
       />
+      <circle
+        cx={pts[pts.length - 1].split(",")[0]}
+        cy={pts[pts.length - 1].split(",")[1]}
+        r="2.5"
+        fill={color}
+      />
     </svg>
   );
 }
 
+// ─── Modal ────────────────────────────────────────────────────────────────────
 function Modal({ config, onClose }) {
   const [tab, setTab] = useState(0);
   if (!config) return null;
   const { title, icon, color, items, columns, summaryRows, emptyMsg } = config;
+  const displayed = tab === 1 ? [...items].reverse().slice(0, 5) : items;
 
   return (
     <div
@@ -116,46 +59,40 @@ function Modal({ config, onClose }) {
         position: "fixed",
         inset: 0,
         zIndex: 200,
-        background: "rgba(0,0,0,0.75)",
+        background: "rgba(0,0,0,0.72)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        backdropFilter: "blur(8px)",
-        animation: "fadeIn 0.18s ease",
+        backdropFilter: "blur(6px)",
       }}
     >
       <style>{`
-        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
-        @keyframes slideUp { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
         .ms::-webkit-scrollbar{width:3px}
         .ms::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:4px}
-        .tb{background:none;border:none;cursor:pointer;font-family:'DM Mono',monospace;font-size:10px;padding:5px 12px;border-radius:6px;transition:all 0.15s;letter-spacing:0.05em}
-        .tb.on{background:rgba(255,255,255,0.09);color:#fff}
-        .tb:not(.on){color:rgba(255,255,255,0.3)}
-        .tb:not(.on):hover{color:rgba(255,255,255,0.6)}
-        .ir{display:grid;gap:10px;padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;align-items:center;font-family:'DM Mono',monospace}
-        .ir:last-child{border:none}
-        .ch{font-size:9px;color:rgba(255,255,255,0.25);font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:0.08em;padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,0.05);margin-bottom:2px;display:grid;gap:10px}
+        .mtab{background:none;border:none;cursor:pointer;font-family:'Liberation Mono',monospace;
+          font-size:10px;padding:5px 12px;border-radius:6px;letter-spacing:0.05em;transition:all 0.15s}
+        .mtab.on{background:rgba(255,255,255,0.08);color:#fff}
+        .mtab:not(.on){color:rgba(255,255,255,0.3)}
+        .mtab:not(.on):hover{color:rgba(255,255,255,0.6)}
+        .mtr:hover td{background:rgba(255,255,255,0.025)}
       `}</style>
       <div
         style={{
-          background: "rgba(10,10,10,0.97)",
-          border: "1px solid rgba(255,255,255,0.08)",
-          borderRadius: 18,
-          width: 580,
+          background: "#0f0f0f",
+          border: "1px solid rgba(255,255,255,0.09)",
+          borderRadius: 14,
+          width: 600,
           maxWidth: "94vw",
-          maxHeight: "80vh",
+          maxHeight: "78vh",
           display: "flex",
           flexDirection: "column",
-          animation: "slideUp 0.22s ease",
           overflow: "hidden",
-          boxShadow: "0 32px 80px rgba(0,0,0,0.6)",
         }}
       >
         {/* Header */}
         <div
           style={{
-            padding: "20px 22px 14px",
+            padding: "18px 20px 14px",
             borderBottom: "1px solid rgba(255,255,255,0.06)",
             flexShrink: 0,
           }}
@@ -170,15 +107,15 @@ function Modal({ config, onClose }) {
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <div
                 style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 10,
-                  background: `${color}18`,
+                  width: 34,
+                  height: 34,
+                  borderRadius: 8,
+                  background: `${color}15`,
                   border: `1px solid ${color}28`,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontSize: 17,
+                  fontSize: 15,
                 }}
               >
                 {icon}
@@ -186,11 +123,10 @@ function Modal({ config, onClose }) {
               <div>
                 <div
                   style={{
-                    fontSize: 15,
+                    fontSize: 14,
                     fontWeight: 600,
                     color: "#fff",
-                    fontFamily: "'DM Mono',monospace",
-                    letterSpacing: "-0.01em",
+                    fontFamily: "'Liberation Mono',monospace",
                   }}
                 >
                   {title}
@@ -198,9 +134,9 @@ function Modal({ config, onClose }) {
                 <div
                   style={{
                     fontSize: 10,
-                    color: "rgba(255,255,255,0.28)",
-                    fontFamily: "'DM Mono',monospace",
+                    color: "rgba(255,255,255,0.25)",
                     marginTop: 2,
+                    fontFamily: "'Liberation Mono',monospace",
                   }}
                 >
                   {items.length} record{items.length !== 1 ? "s" : ""}
@@ -210,50 +146,50 @@ function Modal({ config, onClose }) {
             <button
               onClick={onClose}
               style={{
-                background: "rgba(255,255,255,0.06)",
+                background: "rgba(255,255,255,0.05)",
                 border: "1px solid rgba(255,255,255,0.08)",
                 color: "rgba(255,255,255,0.4)",
                 width: 28,
                 height: 28,
-                borderRadius: 7,
+                borderRadius: 6,
                 cursor: "pointer",
-                fontSize: 13,
+                fontSize: 12,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                fontFamily: "'DM Mono',monospace",
               }}
             >
               ✕
             </button>
           </div>
+
           {summaryRows?.length > 0 && (
             <div
               style={{
                 display: "flex",
-                flexWrap: "wrap",
                 gap: 6,
                 marginTop: 12,
+                flexWrap: "wrap",
               }}
             >
               {summaryRows.map((s) => (
                 <div
                   key={s.label}
                   style={{
-                    padding: "4px 10px",
-                    borderRadius: 16,
+                    padding: "3px 10px",
+                    borderRadius: 20,
                     background: "rgba(255,255,255,0.03)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    border: "1px solid rgba(255,255,255,0.07)",
                     display: "flex",
                     alignItems: "center",
-                    gap: 7,
+                    gap: 6,
                   }}
                 >
                   <span
                     style={{
                       fontSize: 9,
-                      color: "rgba(255,255,255,0.3)",
-                      fontFamily: "'DM Mono',monospace",
+                      color: "rgba(255,255,255,0.28)",
+                      fontFamily: "'Liberation Mono',monospace",
                       letterSpacing: "0.06em",
                     }}
                   >
@@ -264,7 +200,7 @@ function Modal({ config, onClose }) {
                       fontSize: 11,
                       color,
                       fontWeight: 600,
-                      fontFamily: "'DM Mono',monospace",
+                      fontFamily: "'Liberation Mono',monospace",
                     }}
                   >
                     {s.value}
@@ -273,84 +209,94 @@ function Modal({ config, onClose }) {
               ))}
             </div>
           )}
+
           {items.length > 0 && (
-            <div style={{ display: "flex", gap: 4, marginTop: 12 }}>
-              <button
-                className={`tb ${tab === 0 ? "on" : ""}`}
-                onClick={() => setTab(0)}
-              >
-                all
-              </button>
-              <button
-                className={`tb ${tab === 1 ? "on" : ""}`}
-                onClick={() => setTab(1)}
-              >
-                recent 5
-              </button>
+            <div style={{ display: "flex", gap: 2, marginTop: 12 }}>
+              {["all", "recent 5"].map((lbl, i) => (
+                <button
+                  key={i}
+                  className={`mtab ${tab === i ? "on" : ""}`}
+                  onClick={() => setTab(i)}
+                >
+                  {lbl}
+                </button>
+              ))}
             </div>
           )}
         </div>
+
         {/* Body */}
-        <div
-          className="ms"
-          style={{ overflowY: "auto", padding: "0 22px 18px", flex: 1 }}
-        >
+        <div className="ms" style={{ overflowY: "auto", flex: 1 }}>
           {items.length === 0 ? (
             <div
               style={{
                 textAlign: "center",
                 padding: "40px 0",
-                color: "rgba(255,255,255,0.2)",
-                fontFamily: "'DM Mono',monospace",
+                color: "rgba(255,255,255,0.18)",
+                fontFamily: "'Liberation Mono',monospace",
                 fontSize: 11,
               }}
             >
               {emptyMsg || "No records yet."}
             </div>
           ) : (
-            <>
-              <div
-                className="ch"
-                style={{
-                  gridTemplateColumns: columns
-                    .map((c) => c.width || "1fr")
-                    .join(" "),
-                  marginTop: 14,
-                }}
-              >
-                {columns.map((c) => (
-                  <span key={c.key}>{c.label}</span>
-                ))}
-              </div>
-              {(tab === 1 ? [...items].reverse().slice(0, 5) : items).map(
-                (item, idx) => (
-                  <div
+            <table
+              style={{
+                width: "100%",
+                borderCollapse: "collapse",
+                fontFamily: "'Liberation Mono',monospace",
+              }}
+            >
+              <thead>
+                <tr>
+                  {columns.map((c) => (
+                    <th
+                      key={c.key}
+                      style={{
+                        padding: "9px 20px",
+                        textAlign: "left",
+                        fontSize: 9,
+                        color: "rgba(255,255,255,0.22)",
+                        fontWeight: 500,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.08em",
+                        borderBottom: "1px solid rgba(255,255,255,0.05)",
+                        background: "rgba(255,255,255,0.01)",
+                      }}
+                    >
+                      {c.label}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {displayed.map((item, idx) => (
+                  <tr
                     key={item._id || idx}
-                    className="ir"
-                    style={{
-                      gridTemplateColumns: columns
-                        .map((c) => c.width || "1fr")
-                        .join(" "),
-                    }}
+                    className="mtr"
+                    style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
                   >
                     {columns.map((c) => (
-                      <span
+                      <td
                         key={c.key}
                         style={{
-                          color: c.accent ? color : "rgba(255,255,255,0.65)",
+                          padding: "9px 20px",
+                          fontSize: 11,
+                          color: c.accent ? color : "rgba(255,255,255,0.6)",
                           fontWeight: c.accent ? 600 : 400,
-                          whiteSpace: "nowrap",
+                          maxWidth: 160,
                           overflow: "hidden",
                           textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
                         }}
                       >
                         {c.render ? c.render(item) : (item[c.key] ?? "—")}
-                      </span>
+                      </td>
                     ))}
-                  </div>
-                ),
-              )}
-            </>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
       </div>
@@ -358,6 +304,7 @@ function Modal({ config, onClose }) {
   );
 }
 
+// ─── Stat Card ────────────────────────────────────────────────────────────────
 function StatCard({
   label,
   value,
@@ -375,38 +322,20 @@ function StatCard({
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        borderRadius: 14,
+        borderRadius: 12,
         cursor: "pointer",
-        transition: "all 0.2s",
-        border: `1px solid ${hov ? `${accent}30` : "rgba(255,255,255,0.06)"}`,
-        background: hov ? `${accent}08` : "rgba(255,255,255,0.02)",
+        border: `1px solid ${hov ? `${accent}35` : "rgba(255,255,255,0.07)"}`,
+        background: hov ? `${accent}0a` : "rgba(255,255,255,0.02)",
         padding: "16px 18px",
-        position: "relative",
-        overflow: "hidden",
-        boxShadow: hov ? `0 8px 32px ${accent}15` : "none",
+        transition: "border-color 0.18s, background 0.18s",
+        fontFamily: "'Liberation Mono',monospace",
       }}
     >
-      {/* Subtle glow blob */}
-      <div
-        style={{
-          position: "absolute",
-          top: -20,
-          right: -20,
-          width: 80,
-          height: 80,
-          borderRadius: "50%",
-          background: `${accent}10`,
-          filter: "blur(20px)",
-          pointerEvents: "none",
-          opacity: hov ? 1 : 0.4,
-          transition: "opacity 0.3s",
-        }}
-      />
       <div
         style={{
           display: "flex",
-          alignItems: "flex-start",
           justifyContent: "space-between",
+          alignItems: "flex-start",
           marginBottom: 14,
         }}
       >
@@ -415,8 +344,8 @@ function StatCard({
             width: 30,
             height: 30,
             borderRadius: 8,
-            background: `${accent}15`,
-            border: `1px solid ${accent}25`,
+            background: `${accent}14`,
+            border: `1px solid ${accent}22`,
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
@@ -425,17 +354,15 @@ function StatCard({
         >
           {icon}
         </div>
-        <div style={{ opacity: 0.6 }}>
-          <Sparkline values={sparkData} color={accent} />
-        </div>
+        <Sparkline values={sparkData} color={accent} />
       </div>
       <div
         style={{
           fontSize: 9,
-          color: "rgba(255,255,255,0.3)",
-          letterSpacing: "0.1em",
+          color: "rgba(255,255,255,0.28)",
           textTransform: "uppercase",
-          fontFamily: "'DM Mono',monospace",
+          letterSpacing: "0.1em",
+          marginBottom: 5,
         }}
       >
         {label}
@@ -444,12 +371,10 @@ function StatCard({
         style={{
           fontSize: 20,
           fontWeight: 700,
-          color: loading ? "rgba(255,255,255,0.12)" : "#fff",
+          color: loading ? "rgba(255,255,255,0.1)" : "#fff",
           letterSpacing: "-0.02em",
           lineHeight: 1,
-          margin: "6px 0 4px",
-          fontFamily: "'DM Mono',monospace",
-          transition: "color 0.3s",
+          marginBottom: 5,
         }}
       >
         {loading ? "···" : value}
@@ -457,31 +382,19 @@ function StatCard({
       <div
         style={{
           fontSize: 9,
-          fontFamily: "'DM Mono',monospace",
-          color: "rgba(255,255,255,0.25)",
+          color: "rgba(255,255,255,0.22)",
+          display: "flex",
+          justifyContent: "space-between",
         }}
       >
-        {loading ? "loading..." : sub}
+        <span>{loading ? "loading…" : sub}</span>
+        {hov && <span style={{ color: accent }}>VIEW →</span>}
       </div>
-      {hov && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: 9,
-            right: 12,
-            fontSize: 8,
-            color: accent,
-            fontFamily: "'DM Mono',monospace",
-            letterSpacing: "0.08em",
-          }}
-        >
-          VIEW →
-        </div>
-      )}
     </div>
   );
 }
 
+// ─── Module Card ──────────────────────────────────────────────────────────────
 function ModCard({ title, sub, color, icon, badge, loading, onClick }) {
   const [hov, setHov] = useState(false);
   return (
@@ -490,83 +403,115 @@ function ModCard({ title, sub, color, icon, badge, loading, onClick }) {
       onMouseEnter={() => setHov(true)}
       onMouseLeave={() => setHov(false)}
       style={{
-        borderRadius: 14,
+        borderRadius: 12,
         cursor: "pointer",
-        transition: "all 0.2s",
-        border: `1px solid ${hov ? `${color}30` : "rgba(255,255,255,0.06)"}`,
-        background: hov ? `${color}08` : "rgba(255,255,255,0.02)",
-        padding: "14px 16px",
-        boxShadow: hov ? `0 6px 24px ${color}12` : "none",
-        transform: hov ? "translateY(-2px)" : "none",
+        border: `1px solid ${hov ? `${color}35` : "rgba(255,255,255,0.07)"}`,
+        background: hov ? `${color}0a` : "rgba(255,255,255,0.02)",
+        padding: "13px 15px",
+        transition: "border-color 0.18s, background 0.18s",
         display: "flex",
-        flexDirection: "column",
+        alignItems: "center",
         gap: 12,
+        fontFamily: "'Liberation Mono',monospace",
       }}
     >
       <div
         style={{
+          width: 36,
+          height: 36,
+          borderRadius: 9,
+          flexShrink: 0,
+          background: `${color}14`,
+          border: `1px solid ${color}22`,
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
+          justifyContent: "center",
+          fontSize: 16,
         }}
       >
-        <div
-          style={{
-            width: 36,
-            height: 36,
-            borderRadius: 10,
-            background: `${color}15`,
-            border: `1px solid ${color}25`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: 16,
-          }}
-        >
-          {icon}
-        </div>
-        <span
-          style={{
-            fontSize: 9,
-            fontFamily: "'DM Mono',monospace",
-            letterSpacing: "0.06em",
-            padding: "3px 9px",
-            borderRadius: 20,
-            background: `${color}15`,
-            border: `1px solid ${color}25`,
-            color,
-          }}
-        >
-          {loading ? "···" : badge}
-        </span>
+        {icon}
       </div>
-      <div>
+      <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
             fontSize: 12,
             fontWeight: 600,
             color: "#fff",
-            fontFamily: "'DM Mono',monospace",
             marginBottom: 3,
           }}
         >
           {title}
         </div>
-        <div
-          style={{
-            fontSize: 10,
-            color: "rgba(255,255,255,0.28)",
-            fontFamily: "'DM Mono',monospace",
-          }}
-        >
+        <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)" }}>
           {sub}
         </div>
       </div>
+      <span
+        style={{
+          fontSize: 9,
+          padding: "3px 9px",
+          borderRadius: 20,
+          background: `${color}14`,
+          border: `1px solid ${color}22`,
+          color,
+          whiteSpace: "nowrap",
+          flexShrink: 0,
+          letterSpacing: "0.05em",
+        }}
+      >
+        {loading ? "···" : badge}
+      </span>
     </div>
   );
 }
 
-function ProfileRow({ label, value, accent, mono }) {
+// ─── Quick Item ───────────────────────────────────────────────────────────────
+function QuickItem({ label, count, color, onClick }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button
+      onClick={onClick}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "7px 10px",
+        borderRadius: 7,
+        width: "100%",
+        marginBottom: 3,
+        background: hov ? "rgba(255,255,255,0.05)" : "transparent",
+        border: "1px solid transparent",
+        cursor: "pointer",
+        transition: "background 0.12s",
+        textAlign: "left",
+        fontFamily: "'Liberation Mono',monospace",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div
+          style={{
+            width: 5,
+            height: 5,
+            borderRadius: "50%",
+            background: color,
+            flexShrink: 0,
+          }}
+        />
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>
+          {label}
+        </span>
+      </div>
+      <span style={{ fontSize: 10, color: "rgba(255,255,255,0.2)" }}>
+        {count}
+      </span>
+    </button>
+  );
+}
+
+// ─── Profile Row ──────────────────────────────────────────────────────────────
+function ProfileRow({ label, value, accent }) {
   return (
     <div
       style={{
@@ -575,13 +520,13 @@ function ProfileRow({ label, value, accent, mono }) {
         justifyContent: "space-between",
         padding: "7px 0",
         borderBottom: "1px solid rgba(255,255,255,0.04)",
+        fontFamily: "'Liberation Mono',monospace",
       }}
     >
       <span
         style={{
           fontSize: 9,
-          color: "rgba(255,255,255,0.28)",
-          fontFamily: "'DM Mono',monospace",
+          color: "rgba(255,255,255,0.25)",
           textTransform: "uppercase",
           letterSpacing: "0.08em",
         }}
@@ -591,10 +536,7 @@ function ProfileRow({ label, value, accent, mono }) {
       <span
         style={{
           fontSize: 10,
-          fontFamily: "'DM Mono',monospace",
-          color:
-            accent ||
-            (mono ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.7)"),
+          color: accent ? accent : "rgba(255,255,255,0.6)",
           fontWeight: accent ? 600 : 400,
           maxWidth: 180,
           overflow: "hidden",
@@ -608,453 +550,317 @@ function ProfileRow({ label, value, accent, mono }) {
   );
 }
 
-function QuickBtn({ label, sub, color, onClick }) {
-  const [hov, setHov] = useState(false);
+// ─── Section Label ────────────────────────────────────────────────────────────
+function SectionLabel({ children }) {
   return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHov(true)}
-      onMouseLeave={() => setHov(false)}
+    <div
       style={{
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
-        padding: "8px 10px",
-        borderRadius: 8,
-        width: "100%",
-        marginBottom: 5,
-        background: hov ? "rgba(255,255,255,0.06)" : "rgba(255,255,255,0.025)",
-        border: `1px solid ${hov ? "rgba(255,255,255,0.1)" : "rgba(255,255,255,0.05)"}`,
-        cursor: "pointer",
-        transition: "all 0.15s",
-        textAlign: "left",
+        gap: 8,
+        margin: "20px 0 9px",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-        <div
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: "50%",
-            background: color,
-            boxShadow: `0 0 6px ${color}`,
-            flexShrink: 0,
-          }}
-        />
-        <div>
-          <div
-            style={{
-              fontSize: 11,
-              fontWeight: 500,
-              color: "#fff",
-              fontFamily: "'DM Mono',monospace",
-            }}
-          >
-            {label}
-          </div>
-          <div
-            style={{
-              fontSize: 9,
-              color: "rgba(255,255,255,0.28)",
-              fontFamily: "'DM Mono',monospace",
-            }}
-          >
-            {sub}
-          </div>
-        </div>
-      </div>
       <span
         style={{
-          fontSize: 12,
-          color: "rgba(255,255,255,0.18)",
-          fontFamily: "'DM Mono',monospace",
+          fontSize: 9,
+          color: "rgba(255,255,255,0.2)",
+          textTransform: "uppercase",
+          letterSpacing: "0.12em",
+          fontFamily: "'Liberation Mono',monospace",
+          whiteSpace: "nowrap",
         }}
       >
-        ›
+        // {children}
       </span>
-    </button>
+      <div
+        style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.05)" }}
+      />
+    </div>
   );
 }
 
+// ─── Modal Configs ────────────────────────────────────────────────────────────
 function buildModalConfig(key, data, currency) {
   const c = currency || "USD";
-  switch (key) {
-    case "salary":
-      return {
-        title: "Salary",
-        icon: "💼",
-        color: "#22c55e",
-        emptyMsg: "No salary entries yet.",
-        summaryRows: [
-          { label: "TOTAL", value: fmt(sum(data, "amount"), c) },
-          { label: "ENTRIES", value: String(data.length) },
-        ],
-        columns: [
-          { key: "title", label: "Title", width: "2fr" },
-          {
-            key: "amount",
-            label: "Amount",
-            width: "1fr",
-            accent: true,
-            render: (r) => fmt(r.amount, c),
+  const configs = {
+    salary: {
+      title: "Salary",
+      icon: "💼",
+      color: "#22c55e",
+      emptyMsg: "No salary entries yet.",
+      summaryRows: [
+        { label: "TOTAL", value: fmt(sum(data, "amount"), c) },
+        { label: "ENTRIES", value: String(data.length) },
+      ],
+      columns: [
+        { key: "title", label: "Title" },
+        {
+          key: "amount",
+          label: "Amount",
+          accent: true,
+          render: (r) => fmt(r.amount, c),
+        },
+        {
+          key: "date",
+          label: "Date",
+          render: (r) => fmtDate(r.date || r.createdAt),
+        },
+        {
+          key: "description",
+          label: "Note",
+          render: (r) => r.description || r.note || "—",
+        },
+      ],
+    },
+    savings: {
+      title: "Savings",
+      icon: "🐖",
+      color: "#38bdf8",
+      emptyMsg: "No savings records yet.",
+      summaryRows: [
+        { label: "TOTAL SAVED", value: fmt(sum(data, "amount"), c) },
+        { label: "RECORDS", value: String(data.length) },
+      ],
+      columns: [
+        { key: "title", label: "Title" },
+        {
+          key: "amount",
+          label: "Amount",
+          accent: true,
+          render: (r) => fmt(r.amount, c),
+        },
+        {
+          key: "goal",
+          label: "Goal",
+          render: (r) => (r.goal ? fmt(r.goal, c) : "—"),
+        },
+        {
+          key: "date",
+          label: "Date",
+          render: (r) => fmtDate(r.date || r.createdAt),
+        },
+      ],
+    },
+    bonus: {
+      title: "Bonuses",
+      icon: "⭐",
+      color: "#facc15",
+      emptyMsg: "No bonuses recorded yet.",
+      summaryRows: [
+        { label: "TOTAL", value: fmt(sum(data, "amount"), c) },
+        { label: "COUNT", value: String(data.length) },
+      ],
+      columns: [
+        { key: "title", label: "Title" },
+        {
+          key: "amount",
+          label: "Amount",
+          accent: true,
+          render: (r) => fmt(r.amount, c),
+        },
+        { key: "type", label: "Type", render: (r) => r.type || "—" },
+        {
+          key: "date",
+          label: "Date",
+          render: (r) => fmtDate(r.date || r.createdAt),
+        },
+      ],
+    },
+    expense: {
+      title: "Expenses",
+      icon: "🧾",
+      color: "#fb923c",
+      emptyMsg: "No expenses logged yet.",
+      summaryRows: [
+        { label: "TOTAL SPENT", value: fmt(sum(data, "amount"), c) },
+        { label: "ITEMS", value: String(data.length) },
+      ],
+      columns: [
+        { key: "title", label: "Title" },
+        {
+          key: "amount",
+          label: "Amount",
+          accent: true,
+          render: (r) => fmt(r.amount, c),
+        },
+        {
+          key: "category",
+          label: "Category",
+          render: (r) => r.category || "—",
+        },
+        {
+          key: "date",
+          label: "Date",
+          render: (r) => fmtDate(r.date || r.createdAt),
+        },
+      ],
+    },
+    exchangelog: {
+      title: "Exchange Log",
+      icon: "💱",
+      color: "#a78bfa",
+      emptyMsg: "No currency exchanges logged.",
+      summaryRows: [{ label: "TOTAL LOGS", value: String(data.length) }],
+      columns: [
+        {
+          key: "fromCurrency",
+          label: "From",
+          render: (r) => r.fromCurrency || r.from || "—",
+        },
+        {
+          key: "toCurrency",
+          label: "To",
+          render: (r) => r.toCurrency || r.to || "—",
+        },
+        {
+          key: "amount",
+          label: "Amount",
+          accent: true,
+          render: (r) => fmt(r.amount, r.fromCurrency || c),
+        },
+        {
+          key: "rate",
+          label: "Rate",
+          render: (r) => (r.rate ? Number(r.rate).toFixed(4) : "—"),
+        },
+        {
+          key: "date",
+          label: "Date",
+          render: (r) => fmtDate(r.date || r.createdAt),
+        },
+      ],
+    },
+    remittance: {
+      title: "Remittance",
+      icon: "✈️",
+      color: "#38bdf8",
+      emptyMsg: "No remittances sent.",
+      summaryRows: [
+        { label: "TOTAL SENT", value: fmt(sum(data, "amount"), c) },
+        { label: "COUNT", value: String(data.length) },
+      ],
+      columns: [
+        {
+          key: "recipient",
+          label: "Recipient",
+          render: (r) => r.recipient || r.name || "—",
+        },
+        {
+          key: "amount",
+          label: "Amount",
+          accent: true,
+          render: (r) => fmt(r.amount, c),
+        },
+        { key: "country", label: "Country", render: (r) => r.country || "—" },
+        { key: "status", label: "Status", render: (r) => r.status || "—" },
+        {
+          key: "date",
+          label: "Date",
+          render: (r) => fmtDate(r.date || r.createdAt),
+        },
+      ],
+    },
+    plans: {
+      title: "Financial Plans",
+      icon: "🎯",
+      color: "#22c55e",
+      emptyMsg: "No plans created yet.",
+      summaryRows: [
+        { label: "TOTAL PLANS", value: String(data.length) },
+        {
+          label: "ACTIVE",
+          value: String(
+            data.filter((p) => p.status === "active" || !p.status).length,
+          ),
+        },
+      ],
+      columns: [
+        { key: "title", label: "Plan" },
+        {
+          key: "target",
+          label: "Target",
+          accent: true,
+          render: (r) => (r.target ? fmt(r.target, c) : "—"),
+        },
+        {
+          key: "progress",
+          label: "Progress",
+          render: (r) => (r.progress != null ? `${r.progress}%` : "—"),
+        },
+        { key: "status", label: "Status", render: (r) => r.status || "Active" },
+        {
+          key: "deadline",
+          label: "Due",
+          render: (r) => fmtDate(r.deadline || r.dueDate),
+        },
+      ],
+    },
+    notes: {
+      title: "Notes",
+      icon: "📓",
+      color: "#fb923c",
+      emptyMsg: "Your notebook is empty.",
+      summaryRows: [
+        { label: "TOTAL NOTES", value: String(data.length) },
+        { label: "PINNED", value: String(data.filter((n) => n.pinned).length) },
+      ],
+      columns: [
+        { key: "title", label: "Title" },
+        {
+          key: "content",
+          label: "Preview",
+          render: (r) => {
+            const t = r.content || r.body || "";
+            return t.slice(0, 50) + (t.length > 50 ? "…" : "");
           },
-          {
-            key: "date",
-            label: "Date",
-            width: "1fr",
-            mono: true,
-            render: (r) => fmtDate(r.date || r.createdAt),
-          },
-          {
-            key: "description",
-            label: "Note",
-            width: "2fr",
-            render: (r) => r.description || r.note || "—",
-          },
-        ],
-        items: data,
-      };
-    case "savings":
-      return {
-        title: "Savings",
-        icon: "🐖",
-        color: "#38bdf8",
-        emptyMsg: "No savings records yet.",
-        summaryRows: [
-          { label: "TOTAL SAVED", value: fmt(sum(data, "amount"), c) },
-          { label: "RECORDS", value: String(data.length) },
-        ],
-        columns: [
-          { key: "title", label: "Title", width: "2fr" },
-          {
-            key: "amount",
-            label: "Amount",
-            width: "1fr",
-            accent: true,
-            render: (r) => fmt(r.amount, c),
-          },
-          {
-            key: "goal",
-            label: "Goal",
-            width: "1fr",
-            render: (r) => (r.goal ? fmt(r.goal, c) : "—"),
-          },
-          {
-            key: "date",
-            label: "Date",
-            width: "1fr",
-            mono: true,
-            render: (r) => fmtDate(r.date || r.createdAt),
-          },
-        ],
-        items: data,
-      };
-    case "bonus":
-      return {
-        title: "Bonuses",
-        icon: "⭐",
-        color: "#facc15",
-        emptyMsg: "No bonuses recorded yet.",
-        summaryRows: [
-          { label: "TOTAL", value: fmt(sum(data, "amount"), c) },
-          { label: "COUNT", value: String(data.length) },
-        ],
-        columns: [
-          { key: "title", label: "Title", width: "2fr" },
-          {
-            key: "amount",
-            label: "Amount",
-            width: "1fr",
-            accent: true,
-            render: (r) => fmt(r.amount, c),
-          },
-          {
-            key: "type",
-            label: "Type",
-            width: "1fr",
-            render: (r) => r.type || "—",
-          },
-          {
-            key: "date",
-            label: "Date",
-            width: "1fr",
-            mono: true,
-            render: (r) => fmtDate(r.date || r.createdAt),
-          },
-        ],
-        items: data,
-      };
-    case "expense":
-      return {
-        title: "Expenses",
-        icon: "🧾",
-        color: "#fb923c",
-        emptyMsg: "No expenses logged yet.",
-        summaryRows: [
-          { label: "TOTAL SPENT", value: fmt(sum(data, "amount"), c) },
-          { label: "ITEMS", value: String(data.length) },
-        ],
-        columns: [
-          { key: "title", label: "Title", width: "2fr" },
-          {
-            key: "amount",
-            label: "Amount",
-            width: "1fr",
-            accent: true,
-            render: (r) => fmt(r.amount, c),
-          },
-          {
-            key: "category",
-            label: "Category",
-            width: "1fr",
-            render: (r) => r.category || "—",
-          },
-          {
-            key: "date",
-            label: "Date",
-            width: "1fr",
-            mono: true,
-            render: (r) => fmtDate(r.date || r.createdAt),
-          },
-        ],
-        items: data,
-      };
-    case "exchangelog":
-      return {
-        title: "Exchange Log",
-        icon: "💱",
-        color: "#a78bfa",
-        emptyMsg: "No currency exchanges logged.",
-        summaryRows: [{ label: "TOTAL LOGS", value: String(data.length) }],
-        columns: [
-          {
-            key: "fromCurrency",
-            label: "From",
-            width: "1fr",
-            render: (r) => r.fromCurrency || r.from || "—",
-          },
-          {
-            key: "toCurrency",
-            label: "To",
-            width: "1fr",
-            render: (r) => r.toCurrency || r.to || "—",
-          },
-          {
-            key: "amount",
-            label: "Amount",
-            width: "1fr",
-            accent: true,
-            render: (r) => fmt(r.amount, r.fromCurrency || c),
-          },
-          {
-            key: "rate",
-            label: "Rate",
-            width: "1fr",
-            mono: true,
-            render: (r) => (r.rate ? Number(r.rate).toFixed(4) : "—"),
-          },
-          {
-            key: "date",
-            label: "Date",
-            width: "1fr",
-            mono: true,
-            render: (r) => fmtDate(r.date || r.createdAt),
-          },
-        ],
-        items: data,
-      };
-    case "remittance":
-      return {
-        title: "Remittance",
-        icon: "✈️",
-        color: "#38bdf8",
-        emptyMsg: "No remittances sent.",
-        summaryRows: [
-          { label: "TOTAL SENT", value: fmt(sum(data, "amount"), c) },
-          { label: "COUNT", value: String(data.length) },
-        ],
-        columns: [
-          {
-            key: "recipient",
-            label: "Recipient",
-            width: "2fr",
-            render: (r) => r.recipient || r.name || "—",
-          },
-          {
-            key: "amount",
-            label: "Amount",
-            width: "1fr",
-            accent: true,
-            render: (r) => fmt(r.amount, c),
-          },
-          {
-            key: "country",
-            label: "Country",
-            width: "1fr",
-            render: (r) => r.country || "—",
-          },
-          {
-            key: "status",
-            label: "Status",
-            width: "1fr",
-            render: (r) => r.status || "—",
-          },
-          {
-            key: "date",
-            label: "Date",
-            width: "1fr",
-            mono: true,
-            render: (r) => fmtDate(r.date || r.createdAt),
-          },
-        ],
-        items: data,
-      };
-    case "plans":
-      return {
-        title: "Financial Plans",
-        icon: "🎯",
-        color: "#22c55e",
-        emptyMsg: "No plans created yet.",
-        summaryRows: [
-          { label: "TOTAL PLANS", value: String(data.length) },
-          {
-            label: "ACTIVE",
-            value: String(
-              data.filter((p) => p.status === "active" || !p.status).length,
-            ),
-          },
-        ],
-        columns: [
-          { key: "title", label: "Plan", width: "2fr" },
-          {
-            key: "target",
-            label: "Target",
-            width: "1fr",
-            accent: true,
-            render: (r) => (r.target ? fmt(r.target, c) : "—"),
-          },
-          {
-            key: "progress",
-            label: "Progress",
-            width: "1fr",
-            render: (r) => (r.progress != null ? `${r.progress}%` : "—"),
-          },
-          {
-            key: "status",
-            label: "Status",
-            width: "1fr",
-            render: (r) => r.status || "Active",
-          },
-          {
-            key: "deadline",
-            label: "Due",
-            width: "1fr",
-            mono: true,
-            render: (r) => fmtDate(r.deadline || r.dueDate),
-          },
-        ],
-        items: data,
-      };
-    case "notes":
-      return {
-        title: "Notes",
-        icon: "📓",
-        color: "#fb923c",
-        emptyMsg: "Your notebook is empty.",
-        summaryRows: [
-          { label: "TOTAL NOTES", value: String(data.length) },
-          {
-            label: "PINNED",
-            value: String(data.filter((n) => n.pinned).length),
-          },
-        ],
-        columns: [
-          { key: "title", label: "Title", width: "2fr" },
-          {
-            key: "content",
-            label: "Preview",
-            width: "3fr",
-            render: (r) => {
-              const t = r.content || r.body || "";
-              return t.slice(0, 60) + (t.length > 60 ? "…" : "");
-            },
-          },
-          {
-            key: "pinned",
-            label: "Pinned",
-            width: "1fr",
-            render: (r) => (r.pinned ? "📌" : "—"),
-          },
-          {
-            key: "createdAt",
-            label: "Date",
-            width: "1fr",
-            mono: true,
-            render: (r) => fmtDate(r.createdAt),
-          },
-        ],
-        items: data,
-      };
-    default:
-      return null;
-  }
+        },
+        {
+          key: "pinned",
+          label: "Pinned",
+          render: (r) => (r.pinned ? "📌" : "—"),
+        },
+        {
+          key: "createdAt",
+          label: "Date",
+          render: (r) => fmtDate(r.createdAt),
+        },
+      ],
+    },
+  };
+  return configs[key] ? { ...configs[key], items: data } : null;
 }
 
+// Add this above your Overview component (or at the top of the file)
+function useGreeting() {
+  const hour = new Date().getHours();
+  if (hour >= 5 && hour < 12) return { text: "good morning", emoji: "☀️" };
+  if (hour >= 12 && hour < 17) return { text: "good afternoon", emoji: "🌤️" };
+  if (hour >= 17 && hour < 21) return { text: "good evening", emoji: "🌆" };
+  return { text: "good night", emoji: "🌙" };
+}
+
+const NAME_COLORS = [
+  "#22c55e",
+  "#38bdf8",
+  "#facc15",
+  "#fb923c",
+  "#a78bfa",
+  "#f472b6",
+  "#34d399",
+];
+
+function useNameColor(name) {
+  // Stable color per name — same person always gets same color
+  if (!name) return "#22c55e";
+  const idx = name.charCodeAt(0) % NAME_COLORS.length;
+  return NAME_COLORS[idx];
+}
+
+// ─── Overview Page ────────────────────────────────────────────────────────────
 export default function Overview() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+  const { user, data, loading, syncing, sync } = useFinanceData();
   const [modal, setModal] = useState(null);
-  const [data, setData] = useState({
-    salaries: [],
-    savings: [],
-    bonuses: [],
-    expenses: [],
-    exchangelogs: [],
-    remittances: [],
-    plans: [],
-    notes: [],
-  });
-
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [salR, savR, bonR, expR, exlR, remR, plnR, notR, dashR] =
-        await Promise.allSettled([
-          apiFetch("/salaries"),
-          apiFetch("/savings"),
-          apiFetch("/bonuses"),
-          apiFetch("/expenses"),
-          apiFetch("/exchangelog"),
-          apiFetch("/remittances"),
-          apiFetch("/plans"),
-          apiFetch("/notes"),
-          apiFetch("/dashboard"),
-        ]);
-      setData({
-        salaries: extract(salR),
-        savings: extract(savR),
-        bonuses: extract(bonR),
-        expenses: extract(expR),
-        exchangelogs: extract(exlR),
-        remittances: extract(remR),
-        plans: extract(plnR),
-        notes: extract(notR),
-      });
-      if (dashR.status === "fulfilled") {
-        const v = dashR.value;
-        setUser(v?.user ?? v?.data?.user ?? null);
-      }
-    } catch (err) {
-      console.error("Overview fetch error:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
 
   const openModal = (key) => {
     const dataMap = {
@@ -1068,13 +874,7 @@ export default function Overview() {
       notes: data.notes,
     };
     const config = buildModalConfig(key, dataMap[key] || [], user?.currency);
-    setModal({ key, config });
-  };
-
-  const handleSync = async () => {
-    setSyncing(true);
-    await fetchAll();
-    setSyncing(false);
+    if (config) setModal({ key, config });
   };
 
   const cur = user?.currency || "USD";
@@ -1084,85 +884,82 @@ export default function Overview() {
   const totalExp = sum(data.expenses, "amount");
   const savRate =
     totalSalary > 0 ? ((totalSavings / totalSalary) * 100).toFixed(1) : "0";
-  const now = new Date().toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
 
   return (
     <>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&display=swap');
-        *{box-sizing:border-box}
-        @keyframes fup{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
-        .a1{animation:fup 0.4s ease both}
-        .a2{animation:fup 0.4s 0.07s ease both}
-        .a3{animation:fup 0.4s 0.14s ease both}
-        .a4{animation:fup 0.4s 0.21s ease both}
-        .a5{animation:fup 0.4s 0.28s ease both}
-        @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
-        .pulse{animation:pulse 2s ease infinite}
+        * { box-sizing: border-box; }
+        @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+        .a1{animation:fadeUp 0.35s ease both}
+        .a2{animation:fadeUp 0.35s 0.06s ease both}
+        .a3{animation:fadeUp 0.35s 0.12s ease both}
+        .a4{animation:fadeUp 0.35s 0.18s ease both}
+        .a5{animation:fadeUp 0.35s 0.24s ease both}
+        @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+        .pulse{animation:blink 2.2s ease infinite}
       `}</style>
 
       <div
         style={{
-          fontFamily: "'DM Mono',monospace",
+          fontFamily: "'Liberation Mono', monospace",
           width: "100%",
           color: "#fff",
         }}
       >
-        {/* ── Header ── */}
+        {/* Header */}
         <div
           className="a1"
           style={{
             display: "flex",
             alignItems: "flex-end",
             justifyContent: "space-between",
-            marginBottom: 28,
+            marginBottom: 26,
           }}
         >
           <div>
             <div
               style={{
                 fontSize: 9,
-                color: "rgba(255,255,255,0.25)",
+                color: "rgba(255,255,255,0.22)",
                 letterSpacing: "0.15em",
                 textTransform: "uppercase",
                 marginBottom: 6,
-                fontFamily: "'DM Mono',monospace",
               }}
             >
               finance_os / overview
             </div>
+
             <h1
               style={{
                 fontSize: 22,
                 fontWeight: 500,
                 color: "#fff",
                 letterSpacing: "-0.03em",
-                lineHeight: 1.1,
+                lineHeight: 1.3,
                 margin: 0,
-                fontFamily: "'DM Mono',monospace",
               }}
             >
-              gm,{" "}
-              <span style={{ color: "#22c55e" }}>
+              <span style={{ fontSize: 18 }}>{useGreeting().emoji}</span>{" "}
+              {useGreeting().text},{" "}
+              <span style={{ color: useNameColor(user?.name?.split(" ")[0]) }}>
                 {user?.name?.split(" ")[0] || "operator"}
               </span>
             </h1>
+
             <p
               style={{
                 fontSize: 10,
-                color: "rgba(255,255,255,0.25)",
+                color: "rgba(255,255,255,0.22)",
                 marginTop: 5,
-                fontFamily: "'DM Mono',monospace",
+                marginBottom: 0,
               }}
             >
               tap any card to view records
             </p>
           </div>
           <button
-            onClick={handleSync}
+            onClick={sync}
             disabled={syncing}
             style={{
               display: "flex",
@@ -1172,43 +969,29 @@ export default function Overview() {
               borderRadius: 8,
               background: "rgba(255,255,255,0.04)",
               border: "1px solid rgba(255,255,255,0.08)",
-              color: syncing ? "#22c55e" : "rgba(255,255,255,0.4)",
+              color: syncing ? "#22c55e" : "rgba(255,255,255,0.35)",
               fontSize: 10,
-              fontFamily: "'DM Mono',monospace",
+              fontFamily: "'Liberation Mono',monospace",
               cursor: syncing ? "not-allowed" : "pointer",
               letterSpacing: "0.05em",
-              transition: "all 0.2s",
+              transition: "all 0.18s",
             }}
           >
             <span className={syncing ? "pulse" : ""}>
               {syncing ? "◉" : "○"}
             </span>
-            {syncing ? "syncing..." : "sync"}
+            {syncing ? "syncing…" : "sync"}
           </button>
         </div>
 
-        {/* ── Section label ── */}
-        <div
-          style={{
-            fontSize: 9,
-            color: "rgba(255,255,255,0.22)",
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            marginBottom: 8,
-            fontFamily: "'DM Mono',monospace",
-          }}
-        >
-          // financial_summary
-        </div>
-
-        {/* ── Stat Cards ── */}
+        {/* Financial Summary */}
+        <SectionLabel>financial_summary</SectionLabel>
         <div
           className="a2"
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(145px,1fr))",
+            gridTemplateColumns: "repeat(auto-fit,minmax(148px,1fr))",
             gap: 8,
-            marginBottom: 10,
           }}
         >
           <StatCard
@@ -1253,28 +1036,14 @@ export default function Overview() {
           />
         </div>
 
-        {/* ── Section label ── */}
-        <div
-          style={{
-            fontSize: 9,
-            color: "rgba(255,255,255,0.22)",
-            letterSpacing: "0.12em",
-            textTransform: "uppercase",
-            margin: "16px 0 8px",
-            fontFamily: "'DM Mono',monospace",
-          }}
-        >
-          // modules
-        </div>
-
-        {/* ── Module Cards ── */}
+        {/* Modules */}
+        <SectionLabel>modules</SectionLabel>
         <div
           className="a3"
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+            gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))",
             gap: 8,
-            marginBottom: 10,
           }}
         >
           <ModCard
@@ -1315,37 +1084,21 @@ export default function Overview() {
           />
         </div>
 
-        {/* ── Bottom Row ── */}
+        {/* Account + Quick Nav */}
+        <SectionLabel>account & navigation</SectionLabel>
         <div
           className="a4"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 8,
-            marginBottom: 10,
-          }}
+          style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}
         >
-          {/* Account */}
+          {/* Account Panel */}
           <div
             style={{
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.07)",
               padding: 16,
               background: "rgba(255,255,255,0.02)",
             }}
           >
-            <div
-              style={{
-                fontSize: 9,
-                color: "rgba(255,255,255,0.22)",
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-                marginBottom: 14,
-                fontFamily: "'DM Mono',monospace",
-              }}
-            >
-              // account
-            </div>
             <div
               style={{
                 display: "flex",
@@ -1353,64 +1106,59 @@ export default function Overview() {
                 gap: 10,
                 paddingBottom: 12,
                 borderBottom: "1px solid rgba(255,255,255,0.05)",
-                marginBottom: 6,
+                marginBottom: 8,
               }}
             >
               <div
                 style={{
-                  width: 36,
-                  height: 36,
+                  width: 38,
+                  height: 38,
                   borderRadius: "50%",
-                  background: "rgba(34,197,94,0.12)",
+                  background: "rgba(34,197,94,0.1)",
                   border: "1px solid rgba(34,197,94,0.2)",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                   color: "#22c55e",
-                  fontWeight: 600,
-                  fontSize: 14,
-                  fontFamily: "'DM Mono',monospace",
+                  fontWeight: 700,
+                  fontSize: 15,
+                  flexShrink: 0,
                 }}
               >
                 {user?.name?.[0]?.toUpperCase() || "U"}
               </div>
               <div>
-                <div
-                  style={{
-                    fontSize: 12,
-                    fontWeight: 500,
-                    color: "#fff",
-                    fontFamily: "'DM Mono',monospace",
-                  }}
-                >
-                  {user?.name || "your_name"}
+                <div style={{ fontSize: 12, fontWeight: 500, color: "#fff" }}>
+                  {user?.name || "—"}
                 </div>
                 <div
                   style={{
-                    fontSize: 9,
-                    color: "rgba(255,255,255,0.25)",
-                    fontFamily: "'DM Mono',monospace",
+                    fontSize: 10,
+                    color: "rgba(255,255,255,0.28)",
+                    marginTop: 2,
                   }}
                 >
-                  personal account
+                  {user?.email || "—"}
                 </div>
               </div>
             </div>
-            <ProfileRow label="email" value={user?.email} />
             <ProfileRow
               label="currency"
               value={user?.currency || "USD"}
               accent="#22c55e"
             />
             <ProfileRow label="theme" value={user?.theme || "obsidian"} />
-            <ProfileRow label="user_id" value={user?._id} mono />
+            <ProfileRow
+              label="user_id"
+              value={user?._id ? `${user._id.slice(0, 12)}…` : "—"}
+            />
           </div>
 
-          {/* Quick View */}
+          {/* Quick Nav */}
           <div
             style={{
-              borderRadius: 14,
-              border: "1px solid rgba(255,255,255,0.06)",
+              borderRadius: 12,
+              border: "1px solid rgba(255,255,255,0.07)",
               padding: 16,
               background: "rgba(255,255,255,0.02)",
             }}
@@ -1418,93 +1166,94 @@ export default function Overview() {
             <div
               style={{
                 fontSize: 9,
-                color: "rgba(255,255,255,0.22)",
+                color: "rgba(255,255,255,0.2)",
                 letterSpacing: "0.12em",
                 textTransform: "uppercase",
-                marginBottom: 12,
-                fontFamily: "'DM Mono',monospace",
+                marginBottom: 10,
               }}
             >
               // quick_view
             </div>
-            <QuickBtn
+            <QuickItem
               label="salary_records"
-              sub={`${data.salaries.length} entries`}
+              count={data.salaries.length}
               color="#22c55e"
               onClick={() => openModal("salary")}
             />
-            <QuickBtn
+            <QuickItem
               label="expense_records"
-              sub={`${data.expenses.length} items`}
+              count={data.expenses.length}
               color="#fb923c"
               onClick={() => openModal("expense")}
             />
-            <QuickBtn
+            <QuickItem
               label="remittances"
-              sub={`${data.remittances.length} transfers`}
+              count={data.remittances.length}
               color="#38bdf8"
               onClick={() => openModal("remittance")}
             />
-            <QuickBtn
+            <QuickItem
               label="plans"
-              sub={`${data.plans.length} goals`}
+              count={data.plans.length}
               color="#a78bfa"
               onClick={() => openModal("plans")}
             />
-            <QuickBtn
+            <QuickItem
               label="exchange_log"
-              sub={`${data.exchangelogs.length} conversions`}
+              count={data.exchangelogs.length}
               color="#facc15"
               onClick={() => openModal("exchangelog")}
             />
-            <QuickBtn
+            <QuickItem
               label="notes"
-              sub={`${data.notes.length} notes`}
+              count={data.notes.length}
               color="#fb923c"
               onClick={() => openModal("notes")}
             />
           </div>
         </div>
 
-        {/* ── Session Bar ── */}
+        {/* Status Bar */}
         <div
           className="a5"
           style={{
             display: "flex",
             alignItems: "center",
             gap: 8,
-            padding: "8px 14px",
+            padding: "7px 14px",
             borderRadius: 8,
+            marginTop: 8,
             background: "rgba(255,255,255,0.01)",
-            border: "1px solid rgba(255,255,255,0.04)",
+            border: "1px solid rgba(255,255,255,0.05)",
           }}
         >
           <div
+            className="pulse"
             style={{
               width: 5,
               height: 5,
               borderRadius: "50%",
               background: "#22c55e",
-              boxShadow: "0 0 5px #22c55e",
               flexShrink: 0,
             }}
-            className="pulse"
           />
           <span
             style={{
               fontSize: 9,
-              color: "rgba(255,255,255,0.22)",
-              fontFamily: "'DM Mono',monospace",
+              color: "rgba(255,255,255,0.2)",
               letterSpacing: "0.05em",
             }}
           >
-            session_active · jwt_authenticated · {now}
+            session_active · jwt_authenticated ·{" "}
+            {new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </span>
           <span
             style={{
-              fontSize: 8,
-              color: "rgba(255,255,255,0.15)",
-              fontFamily: "'DM Mono',monospace",
+              fontSize: 9,
+              color: "rgba(255,255,255,0.1)",
               marginLeft: "auto",
               letterSpacing: "0.1em",
             }}

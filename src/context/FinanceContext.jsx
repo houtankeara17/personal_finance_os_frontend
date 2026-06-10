@@ -1,4 +1,3 @@
-// ✅ Correct — all imports first
 import React, { createContext, useContext, useState, useEffect } from "react";
 import BASE_URL from "../api/config";
 
@@ -16,11 +15,15 @@ export const FinanceProvider = ({ children }) => {
 
   const [theme, setTheme] = useState(user?.theme || "theme-obsidian");
   const [notices, setNotices] = useState([]);
-
+  const [pendingNotice, setPendingNotice] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [savings, setSavings] = useState([]);
   const [plans, setPlans] = useState([]);
   const [notes, setNotes] = useState([]);
+  const [salary, setSalary] = useState([]); // ← add
+  const [bonus, setBonus] = useState([]); // ← add
+  const [remittance, setRemittance] = useState([]); // ← add
+  const [exchangelog, setExchangelog] = useState([]); // ← add
 
   useEffect(() => {
     if (user?.theme) {
@@ -60,25 +63,42 @@ export const FinanceProvider = ({ children }) => {
         Authorization: `Bearer ${activeToken}`,
       };
 
-      const [resExp, resSav, resPln, resNot] = await Promise.all([
-        fetch(`${baseUrl}/expenses`, { headers }).then((r) =>
-          r.ok ? r.json() : { success: false, data: [] },
-        ),
-        fetch(`${baseUrl}/savings`, { headers }).then((r) =>
-          r.ok ? r.json() : { success: false, data: [] },
-        ),
-        fetch(`${baseUrl}/plans`, { headers }).then((r) =>
-          r.ok ? r.json() : { success: false, data: [] },
-        ),
-        fetch(`${baseUrl}/notes`, { headers }).then((r) =>
-          r.ok ? r.json() : { success: false, data: [] },
-        ),
-      ]);
+      const [resExp, resSav, resPln, resNot, resSal, resBon, resRem, resExc] =
+        await Promise.all([
+          fetch(`${baseUrl}/expenses`, { headers }).then((r) =>
+            r.ok ? r.json() : { success: false, data: [] },
+          ),
+          fetch(`${baseUrl}/savings`, { headers }).then((r) =>
+            r.ok ? r.json() : { success: false, data: [] },
+          ),
+          fetch(`${baseUrl}/plans`, { headers }).then((r) =>
+            r.ok ? r.json() : { success: false, data: [] },
+          ),
+          fetch(`${baseUrl}/notes`, { headers }).then((r) =>
+            r.ok ? r.json() : { success: false, data: [] },
+          ),
+          fetch(`${baseUrl}/salaries`, { headers }).then((r) =>
+            r.ok ? r.json() : { success: false, data: [] },
+          ),
+          fetch(`${baseUrl}/bonuses`, { headers }).then((r) =>
+            r.ok ? r.json() : { success: false, data: [] },
+          ),
+          fetch(`${baseUrl}/remittances`, { headers }).then((r) =>
+            r.ok ? r.json() : { success: false, data: [] },
+          ),
+          fetch(`${baseUrl}/exchangelog`, { headers }).then((r) =>
+            r.ok ? r.json() : { success: false, data: [] },
+          ),
+        ]);
 
       if (resExp?.success) setExpenses(resExp.data);
       if (resSav?.success) setSavings(resSav.data);
       if (resPln?.success) setPlans(resPln.data);
       if (resNot?.success) setNotes(resNot.data);
+      if (resSal?.success) setSalary(resSal.data);
+      if (resBon?.success) setBonus(resBon.data);
+      if (resRem?.success) setRemittance(resRem.data);
+      if (resExc?.success) setExchangelog(resExc.data);
     } catch (err) {
       console.error("Sync error details:", err);
     }
@@ -97,11 +117,12 @@ export const FinanceProvider = ({ children }) => {
       }).then((r) => r.json());
 
       if (res.success) {
+        const user = res.user || res.data;
         localStorage.setItem("token", res.token);
-        localStorage.setItem("user", JSON.stringify(res.user));
+        localStorage.setItem("user", JSON.stringify(user));
         setToken(res.token);
-        setUser(res.user);
-        addNotice(`Welcome back, ${res.user.name}`, "success");
+        setUser(user);
+        addNotice(`Welcome back, ${user.name}`, "success");
         return { success: true };
       } else {
         addNotice(res.message || "Login failed.", "error");
@@ -122,10 +143,11 @@ export const FinanceProvider = ({ children }) => {
       }).then((r) => r.json());
 
       if (res.success) {
+        const user = res.user || res.data;
         localStorage.setItem("token", res.token);
-        localStorage.setItem("user", JSON.stringify(res.user));
+        localStorage.setItem("user", JSON.stringify(user));
         setToken(res.token);
-        setUser(res.user);
+        setUser(user);
         addNotice("Account space instantiated successfully.", "success");
         return { success: true };
       } else {
@@ -139,7 +161,6 @@ export const FinanceProvider = ({ children }) => {
     }
   };
 
-  // ─── UPGRADED UNIFIED OAUTH INITIALIZER ──────────────────────────────────
   const executeOAuthSuccess = async (receivedToken) => {
     try {
       const res = await fetch(`${BASE_URL}/api/auth/me`, {
@@ -200,22 +221,23 @@ export const FinanceProvider = ({ children }) => {
 
   // ─── RESTRUCTURED LOGOUT PIPELINE ────────────────────────────────────────
   const logOut = () => {
-    // 1. Instantly display the notification toast window safely
-    addNotice("Session lifecycle terminated.", "info");
-
-    // 2. Clear out local device tracking memory straight away
+    setPendingNotice({
+      message: "SESSION LIFECYCLE TERMINATED.",
+      type: "info",
+    });
+    setTimeout(() => setPendingNotice(null), 4000); // ← auto clear
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-
-    // 3. Keep data state structures alive for 400ms so the user can easily see the toast
-    setTimeout(() => {
-      setToken("");
-      setUser(null);
-      setExpenses([]);
-      setSavings([]);
-      setPlans([]);
-      setNotes([]);
-    }, 400);
+    setExpenses([]);
+    setSavings([]);
+    setPlans([]);
+    setNotes([]);
+    setSalary([]);
+    setBonus([]);
+    setRemittance([]);
+    setExchangelog([]);
+    setUser(null);
+    setToken("");
   };
 
   return (
@@ -229,6 +251,12 @@ export const FinanceProvider = ({ children }) => {
         savings,
         plans,
         notes,
+        salary,
+        bonus,
+        remittance,
+        exchangelog,
+        pendingNotice,
+        setPendingNotice,
         executeLogin,
         executeRegister,
         executeOAuthSuccess,
@@ -240,70 +268,6 @@ export const FinanceProvider = ({ children }) => {
       }}
     >
       {children}
-
-      {/* ⚡ FORTIFIED FLOATING TERMINAL NOTIFICATION ENGINE ⚡ */}
-      <div
-        style={{
-          position: "fixed",
-          bottom: "24px",
-          right: "24px",
-          zIndex: 999999,
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px",
-          pointerEvents: "none",
-        }}
-      >
-        {notices.map((n) => {
-          let bgColor = "#18181b";
-          let textColor = "#e4e4e7";
-          let borderColor = "rgba(255,255,255,0.08)";
-
-          if (n.type === "success") {
-            bgColor = "#022c22";
-            textColor = "#34d399";
-            borderColor = "rgba(16,185,129,0.3)";
-          } else if (n.type === "error") {
-            bgColor = "#450a0a";
-            textColor = "#f87171";
-            borderColor = "rgba(239,68,68,0.3)";
-          } else if (n.type === "info") {
-            bgColor = "#09334f";
-            textColor = "#38bdf8";
-            borderColor = "rgba(14,165,233,0.3)";
-          }
-
-          return (
-            <div
-              key={n.id}
-              style={{
-                pointerEvents: "auto",
-                padding: "14px 18px",
-                borderRadius: "6px",
-                background: bgColor,
-                color: textColor,
-                border: `1px solid ${borderColor}`,
-                fontFamily: "'DM Mono', monospace",
-                fontSize: "11px",
-                fontWeight: "500",
-                letterSpacing: "0.05em",
-                minWidth: "260px",
-                boxShadow: "0 10px 30px -10px rgba(0,0,0,0.7)",
-                display: "flex",
-                alignItems: "center",
-                gap: "10px",
-              }}
-            >
-              <span style={{ fontSize: "14px", fontWeight: "700" }}>
-                {n.type === "success" ? "✓" : n.type === "error" ? "✗" : "•"}
-              </span>
-              <span style={{ textTransform: "uppercase" }}>
-                {String(n.message)}
-              </span>
-            </div>
-          );
-        })}
-      </div>
     </FinanceContext.Provider>
   );
 };

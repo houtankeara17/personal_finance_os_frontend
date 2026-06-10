@@ -23,11 +23,13 @@ export default function Register() {
     setError("");
     setLoading(true);
     try {
-      const success = await executeRegister(name, email, password);
-      if (success) {
+      const res = await executeRegister(name, email, password);
+      if (res.success) {
         navigate("/");
       } else {
-        setError("Registration failed. Please check your details.");
+        setError(
+          res.message || "Registration failed. Please check your details.",
+        );
       }
     } catch (err) {
       setError(err.message || "An error occurred during registration.");
