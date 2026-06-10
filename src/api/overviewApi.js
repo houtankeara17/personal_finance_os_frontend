@@ -37,7 +37,7 @@ export function extract(res) {
 }
 
 export function extractUser(res) {
-  if (res.status !== "fulfilled") return null;
+  if (!res || res.status !== "fulfilled") return null; // ← added !res guard
   const v = res.value;
   return (
     v?.user ??
@@ -70,7 +70,7 @@ export function sum(arr = [], key = "amount") {
 
 export function spark(arr, key = "amount") {
   const vals = arr.slice(-7).map((i) => parseFloat(i?.[key]) || 0);
-  // Need at least 2 points for a line; pad to 7 if short
+  // Need at least 2 points for a line; pad to 7 if short hahahahahaha
   if (vals.length === 0) return [0, 0, 0, 0, 0, 0, 0];
   if (vals.length === 1) return [...vals, ...Array(6).fill(vals[0])];
   return vals;

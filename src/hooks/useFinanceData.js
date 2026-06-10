@@ -32,7 +32,6 @@ export function useFinanceData() {
           apiFetch("/remittances"),
           apiFetch("/plans"),
           apiFetch("/notes"),
-          apiFetch("/dashboard"),
           apiFetch("/auth/me"), // correct route: routes/auth.js -> GET /auth/me
         ]);
 
@@ -47,9 +46,10 @@ export function useFinanceData() {
         notes: extract(notR),
       });
 
-      // /auth/me is the source of truth for name + email
+      // Replace the two extractUser lines with this:
       const userFromMe = extractUser(meR);
       const userFromDash = extractUser(dashR);
+      const userFromSalary = extract(salR)?.[0]?.user ?? null; // fallback if API embeds user duma
       setUser(userFromMe ?? userFromDash ?? null);
     } catch (err) {
       console.error("useFinanceData fetch error:", err);
