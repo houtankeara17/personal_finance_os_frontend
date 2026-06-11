@@ -1,19 +1,13 @@
-import { useEffect, useState, useRef } from "react"; // 1. Added useRef
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useFinance } from "../../context/FinanceContext";
-import BASE_URL from "../../api/config";
-
-const API_URL = import.meta.env.VITE_API_URL || BASE_URL;
 
 export default function OAuthCallback() {
   const navigate = useNavigate();
-  const { setToken, setUser, theme } = useFinance();
+  const { executeOAuthSuccess, theme } = useFinance();
   const [statusText, setStatusText] = useState(
     "Initializing secure authentication exchange...",
   );
-
-  // 2. Create a ref to track if authentication has already started
-  const authStarted = useRef(false);
 
   useEffect(() => {
     const handleOAuth = async () => {
@@ -22,60 +16,28 @@ export default function OAuthCallback() {
       const error = params.get("error");
 
       if (error || !token) {
-        console.error("OAuth failed:", error || "No token received");
         navigate("/login?error=oauth_failed");
         return;
       }
 
-      // 3. Guard clause: If this ref is true, abort the second execution
-      if (authStarted.current) return;
-      authStarted.current = true; // Mark it as started immediately
+      // Clear URL params immediately to prevent re-runs on React StrictMode
+      window.history.replaceState({}, document.title, window.location.pathname);
 
-      try {
-        setStatusText(
-          "Token synchronized. Verifying your financial engine node...",
-        );
+      setStatusText("Token synchronized. Verifying identity...");
 
-        // Immediately drop token into storage and state BEFORE making the profile request
-        localStorage.setItem("token", token);
-        if (setToken) setToken(token);
+      // Use the context function — don't duplicate the fetch here
+      const result = await executeOAuthSuccess(token);
 
-        // Fetch the newly created profile data
-        const res = await fetch(`${API_URL}/api/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!res.ok) throw new Error("Failed to fetch user profile");
-
-        const data = await res.json();
-        const user = data.user || data.data;
-
-        if (user) {
-          // Update User State completely
-          localStorage.setItem("user", JSON.stringify(user));
-          if (setUser) setUser(user);
-
-          setStatusText("Identity confirmed! Redirecting to dashboard...");
-
-          // Small timeout gives React time to process context changes in memory
-          setTimeout(() => {
-            navigate("/", { replace: true });
-          }, 400);
-        } else {
-          throw new Error("No user profile structure returned from engine");
-        }
-      } catch (err) {
-        console.error("OAuthCallback execution error:", err);
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        if (setToken) setToken(null);
-        if (setUser) setUser(null);
+      if (result.success) {
+        setStatusText("Identity confirmed! Redirecting...");
+        setTimeout(() => navigate("/", { replace: true }), 400);
+      } else {
         navigate("/login?error=oauth_failed");
       }
     };
 
     handleOAuth();
-  }, [navigate, setToken, setUser]);
+  }, []);
 
   const getLoadingBg = () => {
     switch (theme) {
