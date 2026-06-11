@@ -24,15 +24,15 @@ export function useFinanceData() {
     try {
       const [salR, savR, bonR, expR, exlR, remR, plnR, notR, dashR, meR] =
         await Promise.allSettled([
-          apiFetch("/salaries"),
-          apiFetch("/savings"),
-          apiFetch("/bonuses"),
-          apiFetch("/expenses"),
-          apiFetch("/exchangelog"),
-          apiFetch("/remittances"),
-          apiFetch("/plans"),
-          apiFetch("/notes"),
-          apiFetch("/auth/me"), // correct route: routes/auth.js -> GET /auth/me
+          apiFetch("/api/salaries"),
+          apiFetch("/api/savings"),
+          apiFetch("/api/bonuses"),
+          apiFetch("/api/expenses"),
+          apiFetch("/api/exchangelog"),
+          apiFetch("/api/remittances"),
+          apiFetch("/api/plans"),
+          apiFetch("/api/notes"),
+          apiFetch("/api/auth/me"), // correct route: routes/auth.js -> GET /auth/me
         ]);
 
       setData({
