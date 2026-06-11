@@ -200,7 +200,7 @@ export const FinanceProvider = ({ children }) => {
     }
   };
 
-  const updateProfileSettings = async (payload) => {
+  const updateProfile = async (payload) => {
     try {
       const res = await fetch(`${BASE_URL}/api/auth/profile`, {
         method: "PUT",
@@ -260,7 +260,7 @@ export const FinanceProvider = ({ children }) => {
         executeLogin,
         executeRegister,
         executeOAuthSuccess,
-        updateProfileSettings,
+        updateProfile,
         logOut,
         addNotice,
         triggerFetchCycle,
