@@ -49,7 +49,7 @@ export function useFinanceData() {
       // Replace the two extractUser lines with this:
       const userFromMe = extractUser(meR);
       const userFromDash = extractUser(dashR);
-      const userFromSalary = extract(salR)?.[0]?.user ?? null; // fallback if API embeds user duma
+      const userFromSalary = extract(salR)?.[0]?.user ?? null; // fallback if API embeds user gegegegegegege
       setUser(userFromMe ?? userFromDash ?? null);
     } catch (err) {
       console.error("useFinanceData fetch error:", err);
