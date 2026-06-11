@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useFinance } from "../context/FinanceContext";
 import { plansApi } from "../api/planApi";
 
@@ -11,7 +11,7 @@ export const STATUSES = ["Dreaming", "Active Allocation", "Accomplished"];
 export const PRIORITIES = ["Low", "Medium", "High"];
 
 export const YEAR_OPTIONS = Array.from(
-  { length: MAX_YEAR - 2025 + 10 }, // Extended into the future for better navigation range
+  { length: MAX_YEAR - 2025 + 10 },
   (_, i) => 2025 + i,
 );
 
@@ -30,8 +30,55 @@ export const MONTHS = [
   "December",
 ];
 
-export const isFuture = (month, year) =>
-  year > MAX_YEAR || (year === MAX_YEAR && month > MAX_MONTH);
+// ─── Date Range Filter Modes ─────────────────────────────────────────────────
+export const FILTER_MODES = [
+  "TODAY",
+  "YTD",
+  "LAST_1_MONTH",
+  "LAST_2_MONTHS",
+  "CUSTOM",
+];
+
+export const FILTER_LABELS = {
+  TODAY: "TODAY",
+  YTD: "YTD",
+  LAST_1_MONTH: "LAST 1M",
+  LAST_2_MONTHS: "LAST 2M",
+  CUSTOM: "CUSTOM",
+};
+
+const fmt = (d) => d.toISOString().split("T")[0];
+
+// Computes the {startDate, endDate} window for a given filter mode
+export const getDateRange = (mode, year, month) => {
+  const today = new Date();
+
+  switch (mode) {
+    case "TODAY": {
+      return { startDate: fmt(today), endDate: fmt(today) };
+    }
+    case "YTD": {
+      const start = new Date(today.getFullYear(), 0, 1);
+      return { startDate: fmt(start), endDate: fmt(today) };
+    }
+    case "LAST_1_MONTH": {
+      const start = new Date(today);
+      start.setMonth(start.getMonth() - 1);
+      return { startDate: fmt(start), endDate: fmt(today) };
+    }
+    case "LAST_2_MONTHS": {
+      const start = new Date(today);
+      start.setMonth(start.getMonth() - 2);
+      return { startDate: fmt(start), endDate: fmt(today) };
+    }
+    case "CUSTOM":
+    default: {
+      const start = new Date(year, month - 1, 1);
+      const end = new Date(year, month, 0); // last day of selected month
+      return { startDate: fmt(start), endDate: fmt(end) };
+    }
+  }
+};
 
 export const emptyForm = {
   title: "",
@@ -51,9 +98,9 @@ export function usePlans() {
 
   const [curYear, setCurYear] = useState(MAX_YEAR);
   const [curMonth, setCurMonth] = useState(MAX_MONTH);
-  const [viewMode, setViewMode] = useState("TABLE"); // Managed Multi-View State
-  const [records, setRecords] = useState([]);
-  const [planStats, setPlanStats] = useState(null);
+  const [filterMode, setFilterMode] = useState("CUSTOM"); // default = old month-nav behavior
+  const [viewMode, setViewMode] = useState("TABLE");
+  const [allRecords, setAllRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editTarget, setEditTarget] = useState(null);
@@ -63,13 +110,12 @@ export function usePlans() {
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [imagePreviews, setImagePreviews] = useState([]);
 
-  const fetchAll = async (year, month) => {
+  const fetchAll = async () => {
     setLoading(true);
     try {
-      const data = await plansApi.fetchPlans(year, month, syncHeaders);
+      const data = await plansApi.fetchPlans(syncHeaders);
       if (data.success) {
-        setRecords(data.data);
-        setPlanStats(data.stats ?? null);
+        setAllRecords(data.data || []);
       } else {
         addNotice(data.message || "Failed to load plans.", "error");
       }
@@ -81,10 +127,25 @@ export function usePlans() {
   };
 
   useEffect(() => {
-    fetchAll(curYear, curMonth);
-  }, [curYear, curMonth]);
+    fetchAll();
+  }, []);
 
   const isCurrentMonth = curYear === MAX_YEAR && curMonth === MAX_MONTH;
+
+  const dateRange = getDateRange(filterMode, curYear, curMonth);
+
+  // Client-side filter applied on top of the full record set
+  const records = useMemo(() => {
+    const start = new Date(dateRange.startDate);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(dateRange.endDate);
+    end.setHours(23, 59, 59, 999);
+
+    return allRecords.filter((r) => {
+      const created = new Date(r.createdAt);
+      return created >= start && created <= end;
+    });
+  }, [allRecords, dateRange.startDate, dateRange.endDate]);
 
   const goMonth = (delta) => {
     let m = curMonth + delta;
@@ -97,13 +158,11 @@ export function usePlans() {
       m = 1;
       y++;
     }
-    // Future restriction removed completely
     setCurMonth(m);
     setCurYear(y);
   };
 
   const handleDateJump = (month, year) => {
-    // Future restriction removed completely
     setCurMonth(month);
     setCurYear(year);
   };
@@ -193,7 +252,7 @@ export function usePlans() {
           "success",
         );
         setShowModal(false);
-        fetchAll(curYear, curMonth);
+        fetchAll();
       } else {
         addNotice(data.message || "Operation failed.", "error");
       }
@@ -209,7 +268,7 @@ export function usePlans() {
       const data = await plansApi.deletePlan(id, syncHeaders);
       if (data.success) {
         addNotice("Plan deleted permanently.", "success");
-        fetchAll(curYear, curMonth);
+        fetchAll();
       } else {
         addNotice(data.message || "Delete failed.", "error");
       }
@@ -229,9 +288,9 @@ export function usePlans() {
       if (failed > 0) {
         addNotice(`${failed} record(s) failed to delete.`, "error");
       } else {
-        addNotice("All plans deleted permanently.", "success");
+        addNotice("All plans for this period deleted permanently.", "success");
       }
-      fetchAll(curYear, curMonth);
+      fetchAll();
     } catch {
       addNotice("Server error: Could not complete deletion.", "error");
     } finally {
@@ -239,13 +298,9 @@ export function usePlans() {
     }
   };
 
-  // Derived metrics
-  const totalTarget =
-    planStats?.totalTargetUSD ??
-    records.reduce((s, r) => s + (r.targetAmountUSD || 0), 0);
-  const totalFunded =
-    planStats?.totalFunded ??
-    records.reduce((s, r) => s + (r.currentFunding || 0), 0);
+  // Derived metrics — computed from the currently filtered `records`
+  const totalTarget = records.reduce((s, r) => s + (r.targetAmountUSD || 0), 0);
+  const totalFunded = records.reduce((s, r) => s + (r.currentFunding || 0), 0);
   const accomplished = records.filter(
     (r) => r.status === "Accomplished",
   ).length;
@@ -254,6 +309,8 @@ export function usePlans() {
   return {
     curYear,
     curMonth,
+    filterMode,
+    dateRange,
     viewMode,
     setViewMode,
     records,
@@ -272,6 +329,7 @@ export function usePlans() {
     active,
     setCurYear,
     setCurMonth,
+    setFilterMode,
     setForm,
     setShowModal,
     setDeleteId,

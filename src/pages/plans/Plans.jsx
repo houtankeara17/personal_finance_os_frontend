@@ -6,6 +6,8 @@ import {
   PRIORITIES,
   MONTHS,
   YEAR_OPTIONS,
+  FILTER_MODES,
+  FILTER_LABELS,
 } from "../../hooks/usePlan";
 
 const CURRENCY_SYMBOL = { USD: "$", KHR: "៛", THB: "฿" };
@@ -24,7 +26,6 @@ const PRIORITY_STYLE = {
   High: "bg-red-500/10 text-red-400 border border-red-500/20",
 };
 
-// Your Custom View Styling Hooks
 const VIEW_MODES = ["TABLE", "GRID", "LIST"];
 const VIEW_STYLE = {
   TABLE: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20",
@@ -50,8 +51,6 @@ export default function Plans() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          {/* View Mode Switching Tabs */}
-
           <div className="flex items-center gap-2">
             {p.records.length > 0 && (
               <button
@@ -97,66 +96,98 @@ export default function Plans() {
         ))}
       </div>
 
-      {/* Month Navigator */}
-      <div className="flex items-center justify-between border border-white/[0.06] rounded-lg px-4 py-2.5 bg-white/[0.01]">
-        <button
-          onClick={() => p.goMonth(-1)}
-          className="text-[10px] tracking-widest text-white/30 hover:text-white/70 transition-colors px-2 py-1 rounded"
-        >
-          ← PREV
-        </button>
-
-        <div className="flex flex-col items-center gap-1">
-          <div className="flex items-center gap-1.5">
-            <select
-              value={p.curMonth}
-              onChange={(e) =>
-                p.handleDateJump(Number(e.target.value), p.curYear)
-              }
-              className="bg-transparent text-white/80 text-[12px] font-medium tracking-widest uppercase cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
+      {/* Date Range Filter */}
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-1 bg-white/[0.02] border border-white/[0.06] p-1 rounded-sm w-fit">
+          {FILTER_MODES.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => p.setFilterMode(mode)}
+              className={`px-3 py-1 text-[9px] tracking-widest font-medium uppercase rounded-[2px] transition-all duration-150 ${
+                p.filterMode === mode
+                  ? "bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                  : "text-white/40 hover:text-white/70 border border-transparent"
+              }`}
             >
-              {MONTHS.map((name, index) => {
-                const monthNum = index + 1;
-                return (
-                  <option
-                    key={name}
-                    value={monthNum}
-                    className="bg-[#121212] text-white"
-                  >
-                    {name.toUpperCase()}
-                  </option>
-                );
-              })}
-            </select>
-
-            <select
-              value={p.curYear}
-              onChange={(e) =>
-                p.handleDateJump(p.curMonth, Number(e.target.value))
-              }
-              className="bg-transparent text-white/80 text-[12px] font-medium tracking-widest cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
-            >
-              {YEAR_OPTIONS.map((yr) => (
-                <option key={yr} value={yr} className="bg-[#121212] text-white">
-                  {yr}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {p.isCurrentMonth && (
-            <p className="text-[8px] tracking-widest text-white/25 mt-0.5">
-              CURRENT MONTH
-            </p>
-          )}
+              {FILTER_LABELS[mode]}
+            </button>
+          ))}
         </div>
 
-        <button
-          onClick={() => p.goMonth(+1)}
-          className="text-[10px] tracking-widest text-white/30 hover:text-white/70 transition-colors px-2 py-1 rounded"
-        >
-          NEXT →
-        </button>
+        {p.filterMode === "CUSTOM" ? (
+          <div className="flex items-center justify-between border border-white/[0.06] rounded-lg px-4 py-2.5 bg-white/[0.01]">
+            <button
+              onClick={() => p.goMonth(-1)}
+              className="text-[10px] tracking-widest text-white/30 hover:text-white/70 transition-colors px-2 py-1 rounded"
+            >
+              ← PREV
+            </button>
+
+            <div className="flex flex-col items-center gap-1">
+              <div className="flex items-center gap-1.5">
+                <select
+                  value={p.curMonth}
+                  onChange={(e) =>
+                    p.handleDateJump(Number(e.target.value), p.curYear)
+                  }
+                  className="bg-transparent text-white/80 text-[12px] font-medium tracking-widest uppercase cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
+                >
+                  {MONTHS.map((name, index) => {
+                    const monthNum = index + 1;
+                    return (
+                      <option
+                        key={name}
+                        value={monthNum}
+                        className="bg-[#121212] text-white"
+                      >
+                        {name.toUpperCase()}
+                      </option>
+                    );
+                  })}
+                </select>
+
+                <select
+                  value={p.curYear}
+                  onChange={(e) =>
+                    p.handleDateJump(p.curMonth, Number(e.target.value))
+                  }
+                  className="bg-transparent text-white/80 text-[12px] font-medium tracking-widest cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
+                >
+                  {YEAR_OPTIONS.map((yr) => (
+                    <option
+                      key={yr}
+                      value={yr}
+                      className="bg-[#121212] text-white"
+                    >
+                      {yr}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {p.isCurrentMonth && (
+                <p className="text-[8px] tracking-widest text-white/25 mt-0.5">
+                  CURRENT MONTH
+                </p>
+              )}
+            </div>
+
+            <button
+              onClick={() => p.goMonth(+1)}
+              className="text-[10px] tracking-widest text-white/30 hover:text-white/70 transition-colors px-2 py-1 rounded"
+            >
+              NEXT →
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center border border-white/[0.06] rounded-lg px-4 py-2.5 bg-white/[0.01]">
+            <p className="text-[10px] tracking-widest text-white/40">
+              {p.dateRange.startDate}{" "}
+              <span className="text-white/15 mx-1">→</span>{" "}
+              {p.dateRange.endDate}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Custom Styled View Mode Switcher Tabs */}

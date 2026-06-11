@@ -1,21 +1,16 @@
 import BASE_URL from "./config";
-
 const BASE = `${BASE_URL}/api/plans`;
 
 export const plansApi = {
   /**
-   * Fetch plans for a given year and month
+   * Fetch ALL plans for the user (backend does not filter by date)
    */
-  fetchPlans: async (year, month, syncHeaders) => {
-    const res = await fetch(`${BASE}?year=${year}&month=${month}`, {
+  fetchPlans: async (syncHeaders) => {
+    const res = await fetch(BASE, {
       headers: syncHeaders(),
     });
     return await res.json();
   },
-
-  /**
-   * Create a new financial plan
-   */
   createPlan: async (payload, syncHeaders) => {
     const res = await fetch(BASE, {
       method: "POST",
@@ -24,10 +19,6 @@ export const plansApi = {
     });
     return await res.json();
   },
-
-  /**
-   * Update an existing financial plan
-   */
   updatePlan: async (id, payload, syncHeaders) => {
     const res = await fetch(`${BASE}/${id}`, {
       method: "PUT",
@@ -36,10 +27,6 @@ export const plansApi = {
     });
     return await res.json();
   },
-
-  /**
-   * Delete a financial plan
-   */
   deletePlan: async (id, syncHeaders) => {
     const res = await fetch(`${BASE}/${id}`, {
       method: "DELETE",

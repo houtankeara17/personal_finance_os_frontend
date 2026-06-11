@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react"; // 1. Added useRef
 import { useNavigate } from "react-router-dom";
 import { useFinance } from "../../context/FinanceContext";
 import BASE_URL from "../../api/config";
@@ -12,6 +12,9 @@ export default function OAuthCallback() {
     "Initializing secure authentication exchange...",
   );
 
+  // 2. Create a ref to track if authentication has already started
+  const authStarted = useRef(false);
+
   useEffect(() => {
     const handleOAuth = async () => {
       const params = new URLSearchParams(window.location.search);
@@ -24,16 +27,20 @@ export default function OAuthCallback() {
         return;
       }
 
+      // 3. Guard clause: If this ref is true, abort the second execution
+      if (authStarted.current) return;
+      authStarted.current = true; // Mark it as started immediately
+
       try {
         setStatusText(
           "Token synchronized. Verifying your financial engine node...",
         );
 
-        // 1. Immediately drop token into storage and state BEFORE making the profile request
+        // Immediately drop token into storage and state BEFORE making the profile request
         localStorage.setItem("token", token);
         if (setToken) setToken(token);
 
-        // 2. Fetch the newly created profile data
+        // Fetch the newly created profile data
         const res = await fetch(`${API_URL}/api/auth/me`, {
           headers: { Authorization: `Bearer ${token}` },
         });
@@ -44,7 +51,7 @@ export default function OAuthCallback() {
         const user = data.user || data.data;
 
         if (user) {
-          // 3. Update User State completely
+          // Update User State completely
           localStorage.setItem("user", JSON.stringify(user));
           if (setUser) setUser(user);
 

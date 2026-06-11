@@ -42,6 +42,13 @@ const PAIR_STYLE = {
   "THB→KHR": "text-pink-400",
 };
 
+const VIEW_MODES = ["TABLE", "GRID", "LIST"];
+const VIEW_STYLE = {
+  TABLE: "bg-white/[0.07] text-white/70 border border-white/[0.1]",
+  GRID: "bg-white/[0.07] text-white/70 border border-white/[0.1]",
+  LIST: "bg-white/[0.07] text-white/70 border border-white/[0.1]",
+};
+
 const today = new Date();
 
 function fmt(val, currency) {
@@ -87,6 +94,7 @@ export default function ExchangeLog() {
   const [editTarget, setEditTarget] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [filterProvider, setFilterProvider] = useState("ALL");
+  const [viewMode, setViewMode] = useState("TABLE");
 
   // ── Modal helpers ──────────────────────────────────────────────────────
   const openCreate = () => {
@@ -243,101 +251,308 @@ export default function ExchangeLog() {
         </button>
       </div>
 
-      {/* Provider Filter */}
-      <div className="flex flex-wrap gap-2">
-        {["ALL", ...PROVIDERS].map((p) => (
-          <button
-            key={p}
-            onClick={() => setFilterProvider(p)}
-            className={`px-3 py-1 rounded-sm text-[10px] tracking-widest border transition-all ${
-              filterProvider === p
-                ? p === "ALL"
-                  ? "bg-white/[0.08] text-white/70 border-white/[0.15]"
-                  : `${PROVIDER_STYLE[p]} border`
-                : "border-white/[0.06] text-white/25 hover:text-white/50"
-            }`}
-          >
-            {p === "ALL" ? "ALL PROVIDERS" : p.toUpperCase()}
-          </button>
-        ))}
-      </div>
-
-      {/* Table */}
-      <div className="border border-white/[0.06] rounded-sm overflow-hidden">
-        <div className="grid grid-cols-[1fr_1.8fr_1fr_1fr_1fr_auto] text-[9px] tracking-[0.18em] text-white/20 border-b border-white/[0.06] px-4 py-2 bg-white/[0.02]">
-          <span>DATE</span>
-          <span>EXCHANGE</span>
-          <span>RATE USED</span>
-          <span>PROVIDER</span>
-          <span>OFFICIAL RATE</span>
-          <span>ACTIONS</span>
+      {/* Provider Filter + View Mode Switcher */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/[0.06] pb-4">
+        {/* Provider Filter */}
+        <div className="flex flex-wrap gap-2">
+          {["ALL", ...PROVIDERS].map((p) => (
+            <button
+              key={p}
+              onClick={() => setFilterProvider(p)}
+              className={`px-3 py-1 rounded-sm text-[10px] tracking-widest border transition-all ${
+                filterProvider === p
+                  ? p === "ALL"
+                    ? "bg-white/[0.08] text-white/70 border-white/[0.15]"
+                    : `${PROVIDER_STYLE[p]} border`
+                  : "border-white/[0.06] text-white/25 hover:text-white/50"
+              }`}
+            >
+              {p === "ALL" ? "ALL PROVIDERS" : p.toUpperCase()}
+            </button>
+          ))}
         </div>
 
-        {loading ? (
-          <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
-            LOADING LOGS...
-          </div>
-        ) : visible.length === 0 ? (
-          <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
-            NO EXCHANGE LOGS FOR {MONTHS[navMonth - 1].toUpperCase()} {navYear}
-          </div>
-        ) : (
-          visible.map((rec, i) => {
-            const pair = `${rec.fromCurrency}→${rec.toCurrency}`;
-            return (
-              <div
-                key={rec._id}
-                className={`grid grid-cols-[1fr_1.8fr_1fr_1fr_1fr_auto] items-center px-4 py-3 text-[11px] border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors ${i % 2 === 0 ? "" : "bg-white/[0.01]"}`}
-              >
-                <span className="text-white/50">
-                  {rec.day} {MONTHS[rec.monthNumber - 1]?.slice(0, 3)}{" "}
-                  {rec.year}
-                </span>
-                <span
-                  className={`font-medium ${PAIR_STYLE[pair] || "text-white/60"}`}
-                >
-                  {CURRENCY_SYMBOL[rec.fromCurrency]}
-                  {Number(rec.fromAmount).toLocaleString()} {pair}{" "}
-                  {CURRENCY_SYMBOL[rec.toCurrency]}
-                  {Number(rec.toAmount).toLocaleString()}
-                </span>
-                <span className="text-white/60">
-                  {Number(rec.rateUsed).toFixed(6)}
-                </span>
-                <span>
-                  <span
-                    className={`px-2 py-0.5 rounded-sm text-[9px] border ${PROVIDER_STYLE[rec.provider] || "text-white/40 border-white/10"}`}
-                  >
-                    {rec.provider.toUpperCase()}
-                  </span>
-                </span>
-                <span className="text-white/35">
-                  {rec.officialRate ? (
-                    Number(rec.officialRate).toFixed(4)
-                  ) : (
-                    <span className="text-white/15">—</span>
-                  )}
-                </span>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => openEdit(rec)}
-                    className="text-[9px] tracking-widest text-white/30 hover:text-white/70 transition-colors"
-                  >
-                    EDIT
-                  </button>
-                  <span className="text-white/10">|</span>
-                  <button
-                    onClick={() => setDeleteId(rec._id)}
-                    className="text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors"
-                  >
-                    DEL
-                  </button>
-                </div>
-              </div>
-            );
-          })
-        )}
+        {/* View Mode Tabs */}
+        <div className="flex border border-white/[0.08] rounded-sm p-0.5 bg-white/[0.01] shrink-0">
+          {VIEW_MODES.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => setViewMode(mode)}
+              className={`px-3 py-1.5 text-[10px] tracking-widest transition-all rounded-sm ${
+                viewMode === mode
+                  ? VIEW_STYLE[mode]
+                  : "border-transparent text-white/25 hover:text-white/50"
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
       </div>
+
+      {/* ── VIEW: TABLE ─────────────────────────────────────────────────── */}
+      {viewMode === "TABLE" && (
+        <div className="border border-white/[0.06] rounded-sm overflow-hidden">
+          <div className="grid grid-cols-[1fr_1.8fr_1fr_1fr_1fr_auto] text-[9px] tracking-[0.18em] text-white/20 border-b border-white/[0.06] px-4 py-2 bg-white/[0.02]">
+            <span>DATE</span>
+            <span>EXCHANGE</span>
+            <span>RATE USED</span>
+            <span>PROVIDER</span>
+            <span>OFFICIAL RATE</span>
+            <span>ACTIONS</span>
+          </div>
+
+          {loading ? (
+            <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
+              LOADING LOGS...
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
+              NO EXCHANGE LOGS FOR {MONTHS[navMonth - 1].toUpperCase()}{" "}
+              {navYear}
+            </div>
+          ) : (
+            visible.map((rec, i) => {
+              const pair = `${rec.fromCurrency}→${rec.toCurrency}`;
+              return (
+                <div
+                  key={rec._id}
+                  className={`grid grid-cols-[1fr_1.8fr_1fr_1fr_1fr_auto] items-center px-4 py-3 text-[11px] border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors ${i % 2 === 0 ? "" : "bg-white/[0.01]"}`}
+                >
+                  <span className="text-white/50">
+                    {rec.day} {MONTHS[rec.monthNumber - 1]?.slice(0, 3)}{" "}
+                    {rec.year}
+                  </span>
+                  <span
+                    className={`font-medium ${PAIR_STYLE[pair] || "text-white/60"}`}
+                  >
+                    {CURRENCY_SYMBOL[rec.fromCurrency]}
+                    {Number(rec.fromAmount).toLocaleString()} {pair}{" "}
+                    {CURRENCY_SYMBOL[rec.toCurrency]}
+                    {Number(rec.toAmount).toLocaleString()}
+                  </span>
+                  <span className="text-white/60">
+                    {Number(rec.rateUsed).toFixed(6)}
+                  </span>
+                  <span>
+                    <span
+                      className={`px-2 py-0.5 rounded-sm text-[9px] border ${PROVIDER_STYLE[rec.provider] || "text-white/40 border-white/10"}`}
+                    >
+                      {rec.provider.toUpperCase()}
+                    </span>
+                  </span>
+                  <span className="text-white/35">
+                    {rec.officialRate ? (
+                      Number(rec.officialRate).toFixed(4)
+                    ) : (
+                      <span className="text-white/15">—</span>
+                    )}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => openEdit(rec)}
+                      className="text-[9px] tracking-widest text-white/30 hover:text-white/70 transition-colors"
+                    >
+                      EDIT
+                    </button>
+                    <span className="text-white/10">|</span>
+                    <button
+                      onClick={() => setDeleteId(rec._id)}
+                      className="text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors"
+                    >
+                      DEL
+                    </button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      )}
+
+      {/* ── VIEW: GRID ──────────────────────────────────────────────────── */}
+      {viewMode === "GRID" && (
+        <>
+          {loading ? (
+            <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
+              LOADING LOGS...
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
+              NO EXCHANGE LOGS FOR {MONTHS[navMonth - 1].toUpperCase()}{" "}
+              {navYear}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xs:grid-cols-2 lg:grid-cols-3 gap-4">
+              {visible.map((rec) => {
+                const pair = `${rec.fromCurrency}→${rec.toCurrency}`;
+                return (
+                  <div
+                    key={rec._id}
+                    className="border border-white/[0.06] bg-white/[0.02] rounded-sm p-4 space-y-4 relative flex flex-col justify-between"
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <div>
+                        <p className="text-[10px] tracking-widest text-white/30 uppercase">
+                          {rec.day} {MONTHS[rec.monthNumber - 1]?.slice(0, 3)}{" "}
+                          {rec.year}
+                        </p>
+                        <h3
+                          className={`text-base font-semibold mt-1 ${PAIR_STYLE[pair] || "text-white/80"}`}
+                        >
+                          {CURRENCY_SYMBOL[rec.fromCurrency]}
+                          {Number(rec.fromAmount).toLocaleString()}{" "}
+                          <span className="text-xs text-white/30 font-normal">
+                            {rec.fromCurrency}
+                          </span>
+                        </h3>
+                        <p className="text-[11px] text-white/40 mt-0.5">
+                          → {CURRENCY_SYMBOL[rec.toCurrency]}
+                          {Number(rec.toAmount).toLocaleString()}{" "}
+                          <span className="text-white/25">
+                            {rec.toCurrency}
+                          </span>
+                        </p>
+                      </div>
+                      <span
+                        className={`px-2 py-0.5 rounded-sm text-[9px] border shrink-0 ${PROVIDER_STYLE[rec.provider] || "text-white/40 border-white/10"}`}
+                      >
+                        {rec.provider.toUpperCase()}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-[10px]">
+                      <div className="bg-white/[0.02] border border-white/[0.04] rounded-sm px-3 py-2">
+                        <p className="text-white/20 mb-0.5 text-[8px] tracking-widest">
+                          RATE USED
+                        </p>
+                        <p className="text-white/60">
+                          {Number(rec.rateUsed).toFixed(4)}
+                        </p>
+                      </div>
+                      <div className="bg-white/[0.02] border border-white/[0.04] rounded-sm px-3 py-2">
+                        <p className="text-white/20 mb-0.5 text-[8px] tracking-widest">
+                          OFFICIAL
+                        </p>
+                        <p className="text-white/60">
+                          {rec.officialRate ? (
+                            Number(rec.officialRate).toFixed(4)
+                          ) : (
+                            <span className="text-white/15">—</span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {rec.noted && (
+                      <p className="text-[11px] text-white/35 bg-white/[0.01] p-2 border border-white/[0.04] rounded-sm break-words italic">
+                        "{rec.noted}"
+                      </p>
+                    )}
+
+                    <div className="flex gap-3 justify-end pt-2 border-t border-white/[0.04] mt-auto">
+                      <button
+                        onClick={() => openEdit(rec)}
+                        className="text-[9px] tracking-widest text-white/30 hover:text-white/70 transition-colors"
+                      >
+                        EDIT
+                      </button>
+                      <span className="text-white/10">|</span>
+                      <button
+                        onClick={() => setDeleteId(rec._id)}
+                        className="text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors"
+                      >
+                        DEL
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── VIEW: LIST ──────────────────────────────────────────────────── */}
+      {viewMode === "LIST" && (
+        <>
+          {loading ? (
+            <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
+              LOADING LOGS...
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="py-12 text-center text-[11px] text-white/20 tracking-widest">
+              NO EXCHANGE LOGS FOR {MONTHS[navMonth - 1].toUpperCase()}{" "}
+              {navYear}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {visible.map((rec) => {
+                const pair = `${rec.fromCurrency}→${rec.toCurrency}`;
+                return (
+                  <div
+                    key={rec._id}
+                    className="border border-white/[0.05] bg-white/[0.01] hover:bg-white/[0.02] transition-colors rounded-sm px-4 py-3 flex flex-col gap-3 xs:flex-row xs:items-center xs:justify-between"
+                  >
+                    <div className="flex items-center gap-3.5">
+                      {/* Currency pair badge */}
+                      <div className="w-9 h-9 rounded-sm bg-white/[0.03] border border-white/[0.06] flex items-center justify-center flex-shrink-0">
+                        <span className="text-[8px] text-white/30 leading-tight text-center">
+                          {rec.fromCurrency}
+                          <br />→<br />
+                          {rec.toCurrency}
+                        </span>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span
+                            className={`text-[12px] font-semibold ${PAIR_STYLE[pair] || "text-white/80"}`}
+                          >
+                            {CURRENCY_SYMBOL[rec.fromCurrency]}
+                            {Number(rec.fromAmount).toLocaleString()} →{" "}
+                            {CURRENCY_SYMBOL[rec.toCurrency]}
+                            {Number(rec.toAmount).toLocaleString()}
+                          </span>
+                          <span className="text-[10px] text-white/25">
+                            @ {Number(rec.rateUsed).toFixed(4)}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-white/35 tracking-wider uppercase mt-0.5">
+                          {rec.day} {MONTHS[rec.monthNumber - 1]?.slice(0, 3)}{" "}
+                          {rec.year}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between xs:justify-end gap-4 border-t xs:border-t-0 border-white/[0.04] pt-2 xs:pt-0">
+                      <span
+                        className={`px-2 py-0.5 rounded-sm text-[9px] border ${PROVIDER_STYLE[rec.provider] || "text-white/40 border-white/10"}`}
+                      >
+                        {rec.provider.toUpperCase()}
+                      </span>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => openEdit(rec)}
+                          className="text-[9px] tracking-widest text-white/30 hover:text-white/70 transition-colors"
+                        >
+                          EDIT
+                        </button>
+                        <span className="text-white/10">|</span>
+                        <button
+                          onClick={() => setDeleteId(rec._id)}
+                          className="text-[9px] tracking-widest text-red-500/40 hover:text-red-400 transition-colors"
+                        >
+                          DEL
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
 
       {/* Create / Edit Modal */}
       {showModal && (
