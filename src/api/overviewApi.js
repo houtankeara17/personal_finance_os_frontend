@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5001/api";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
 
 export async function apiFetch(path) {
   const token = localStorage.getItem("token");
@@ -37,7 +37,7 @@ export function extract(res) {
 }
 
 export function extractUser(res) {
-  if (!res || res.status !== "fulfilled") return null; // ← added !res guard
+  if (!res || res.status !== "fulfilled") return null;
   const v = res.value;
   return (
     v?.user ??
@@ -48,11 +48,29 @@ export function extractUser(res) {
   );
 }
 
+// ── Plain formatter (no conversion) ─────────────────────────────────────────
+// Used as a fallback or when you already have a converted value.
 export function fmt(val, currency = "USD") {
-  if (val == null || isNaN(Number(val))) return "$0.00";
-  return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(
-    val,
-  );
+  if (val == null || isNaN(Number(val))) {
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency,
+        maximumFractionDigits: currency === "KHR" || currency === "JPY" ? 0 : 2,
+      }).format(0);
+    } catch {
+      return "0.00";
+    }
+  }
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: currency === "KHR" || currency === "JPY" ? 0 : 2,
+    }).format(val);
+  } catch {
+    return `${currency} ${Number(val).toLocaleString("en-US", { minimumFractionDigits: 2 })}`;
+  }
 }
 
 export function fmtDate(d) {
@@ -70,7 +88,6 @@ export function sum(arr = [], key = "amount") {
 
 export function spark(arr, key = "amount") {
   const vals = arr.slice(-7).map((i) => parseFloat(i?.[key]) || 0);
-  // Need at least 2 points for a line; pad to 7 if short
   if (vals.length === 0) return [0, 0, 0, 0, 0, 0, 0];
   if (vals.length === 1) return [...vals, ...Array(6).fill(vals[0])];
   return vals;

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useFinanceData } from "../../hooks/useFinanceData";
 import { fmt, fmtDate, sum, spark } from "../../api/overviewApi";
+import { useCurrencyRates, getRateLabel } from "../../hooks/useCurrencyRates";
 
 // ─── Sparkline ────────────────────────────────────────────────────────────────
 function Sparkline({ values = [], color = "#22c55e" }) {
@@ -580,9 +581,66 @@ function SectionLabel({ children }) {
   );
 }
 
+// ─── Rate Badge ───────────────────────────────────────────────────────────────
+// Shows the live exchange rate in a subtle pill (only when not USD)
+function RateBadge({ rates, currency, ratesLoading, ratesError, lastUpdated }) {
+  if (!currency || currency === "USD") return null;
+  const label = getRateLabel(rates, "USD", currency);
+
+  return (
+    <div
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 6,
+        padding: "4px 10px",
+        borderRadius: 20,
+        background: "rgba(167,139,250,0.08)",
+        border: "1px solid rgba(167,139,250,0.18)",
+        fontFamily: "'Liberation Mono',monospace",
+        fontSize: 9,
+        color: "rgba(255,255,255,0.35)",
+        letterSpacing: "0.05em",
+        marginTop: 6,
+      }}
+    >
+      <span
+        style={{
+          width: 5,
+          height: 5,
+          borderRadius: "50%",
+          background: ratesError ? "#fb923c" : "#a78bfa",
+          flexShrink: 0,
+          display: "inline-block",
+        }}
+      />
+      {ratesLoading
+        ? "fetching rate…"
+        : ratesError
+          ? "rate unavailable (using fallback)"
+          : label
+            ? `${label} · live rate`
+            : `currency: ${currency}`}
+      {lastUpdated && !ratesLoading && !ratesError && (
+        <span style={{ color: "rgba(255,255,255,0.15)" }}>
+          ·{" "}
+          {lastUpdated.toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          })}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ─── Modal Configs ────────────────────────────────────────────────────────────
-function buildModalConfig(key, data, currency) {
+// fmtFn is passed in from the Overview so modals always use the converted formatter
+function buildModalConfig(key, data, currency, fmtFn) {
   const c = currency || "USD";
+  // Use the passed-in converter, or fall back to plain fmt
+  const f = fmtFn || ((val) => fmt(val, c));
+
   const configs = {
     salary: {
       title: "Salary",
@@ -590,7 +648,7 @@ function buildModalConfig(key, data, currency) {
       color: "#22c55e",
       emptyMsg: "No salary entries yet.",
       summaryRows: [
-        { label: "TOTAL", value: fmt(sum(data, "amount"), c) },
+        { label: "TOTAL", value: f(sum(data, "amount")) },
         { label: "ENTRIES", value: String(data.length) },
       ],
       columns: [
@@ -599,7 +657,7 @@ function buildModalConfig(key, data, currency) {
           key: "amount",
           label: "Amount",
           accent: true,
-          render: (r) => fmt(r.amount, c),
+          render: (r) => f(r.amount),
         },
         {
           key: "date",
@@ -619,7 +677,7 @@ function buildModalConfig(key, data, currency) {
       color: "#38bdf8",
       emptyMsg: "No savings records yet.",
       summaryRows: [
-        { label: "TOTAL SAVED", value: fmt(sum(data, "amount"), c) },
+        { label: "TOTAL SAVED", value: f(sum(data, "amount")) },
         { label: "RECORDS", value: String(data.length) },
       ],
       columns: [
@@ -628,12 +686,12 @@ function buildModalConfig(key, data, currency) {
           key: "amount",
           label: "Amount",
           accent: true,
-          render: (r) => fmt(r.amount, c),
+          render: (r) => f(r.amount),
         },
         {
           key: "goal",
           label: "Goal",
-          render: (r) => (r.goal ? fmt(r.goal, c) : "—"),
+          render: (r) => (r.goal ? f(r.goal) : "—"),
         },
         {
           key: "date",
@@ -648,7 +706,7 @@ function buildModalConfig(key, data, currency) {
       color: "#facc15",
       emptyMsg: "No bonuses recorded yet.",
       summaryRows: [
-        { label: "TOTAL", value: fmt(sum(data, "amount"), c) },
+        { label: "TOTAL", value: f(sum(data, "amount")) },
         { label: "COUNT", value: String(data.length) },
       ],
       columns: [
@@ -657,7 +715,7 @@ function buildModalConfig(key, data, currency) {
           key: "amount",
           label: "Amount",
           accent: true,
-          render: (r) => fmt(r.amount, c),
+          render: (r) => f(r.amount),
         },
         { key: "type", label: "Type", render: (r) => r.type || "—" },
         {
@@ -673,7 +731,7 @@ function buildModalConfig(key, data, currency) {
       color: "#fb923c",
       emptyMsg: "No expenses logged yet.",
       summaryRows: [
-        { label: "TOTAL SPENT", value: fmt(sum(data, "amount"), c) },
+        { label: "TOTAL SPENT", value: f(sum(data, "amount")) },
         { label: "ITEMS", value: String(data.length) },
       ],
       columns: [
@@ -682,7 +740,7 @@ function buildModalConfig(key, data, currency) {
           key: "amount",
           label: "Amount",
           accent: true,
-          render: (r) => fmt(r.amount, c),
+          render: (r) => f(r.amount),
         },
         {
           key: "category",
@@ -717,6 +775,7 @@ function buildModalConfig(key, data, currency) {
           key: "amount",
           label: "Amount",
           accent: true,
+          // Exchange logs show original currencies, not the user's display currency
           render: (r) => fmt(r.amount, r.fromCurrency || c),
         },
         {
@@ -737,7 +796,7 @@ function buildModalConfig(key, data, currency) {
       color: "#38bdf8",
       emptyMsg: "No remittances sent.",
       summaryRows: [
-        { label: "TOTAL SENT", value: fmt(sum(data, "amount"), c) },
+        { label: "TOTAL SENT", value: f(sum(data, "amount")) },
         { label: "COUNT", value: String(data.length) },
       ],
       columns: [
@@ -750,7 +809,7 @@ function buildModalConfig(key, data, currency) {
           key: "amount",
           label: "Amount",
           accent: true,
-          render: (r) => fmt(r.amount, c),
+          render: (r) => f(r.amount),
         },
         { key: "country", label: "Country", render: (r) => r.country || "—" },
         { key: "status", label: "Status", render: (r) => r.status || "—" },
@@ -781,7 +840,7 @@ function buildModalConfig(key, data, currency) {
           key: "target",
           label: "Target",
           accent: true,
-          render: (r) => (r.target ? fmt(r.target, c) : "—"),
+          render: (r) => (r.target ? f(r.target) : "—"),
         },
         {
           key: "progress",
@@ -831,7 +890,6 @@ function buildModalConfig(key, data, currency) {
   return configs[key] ? { ...configs[key], items: data } : null;
 }
 
-// Add this above your Overview component (or at the top of the file)
 function useGreeting() {
   const hour = new Date().getHours();
   if (hour >= 5 && hour < 12) return { text: "good morning", emoji: "☀️" };
@@ -851,7 +909,6 @@ const NAME_COLORS = [
 ];
 
 function useNameColor(name) {
-  // Stable color per name — same person always gets same color
   if (!name) return "#22c55e";
   const idx = name.charCodeAt(0) % NAME_COLORS.length;
   return NAME_COLORS[idx];
@@ -861,6 +918,17 @@ function useNameColor(name) {
 export default function Overview() {
   const { user, data, loading, syncing, sync } = useFinanceData();
   const [modal, setModal] = useState(null);
+
+  // The currency from user settings (e.g. "USD", "KHR", "THB")
+  const cur = user?.currency || "USD";
+
+  // Live exchange rates + converter
+  const { rates, ratesLoading, ratesError, lastUpdated, fmtConverted } =
+    useCurrencyRates(cur);
+
+  // Convenience: convert USD amount → user's currency, formatted
+  // This is what we use everywhere amounts are displayed
+  const f = (usdAmount) => fmtConverted(usdAmount, cur);
 
   const openModal = (key) => {
     const dataMap = {
@@ -873,11 +941,11 @@ export default function Overview() {
       plans: data.plans,
       notes: data.notes,
     };
-    const config = buildModalConfig(key, dataMap[key] || [], user?.currency);
+    // Pass `f` so the modal also uses converted amounts
+    const config = buildModalConfig(key, dataMap[key] || [], cur, f);
     if (config) setModal({ key, config });
   };
 
-  const cur = user?.currency || "USD";
   const totalSalary = sum(data.salaries, "amount");
   const totalSavings = sum(data.savings, "amount");
   const totalBonus = sum(data.bonuses, "amount");
@@ -914,7 +982,7 @@ export default function Overview() {
             display: "flex",
             alignItems: "flex-end",
             justifyContent: "space-between",
-            marginBottom: 26,
+            marginBottom: 16,
           }}
         >
           <div>
@@ -957,6 +1025,15 @@ export default function Overview() {
             >
               tap any card to view records
             </p>
+
+            {/* Live rate badge — only shows when user is on a non-USD currency */}
+            <RateBadge
+              rates={rates}
+              currency={cur}
+              ratesLoading={ratesLoading}
+              ratesError={ratesError}
+              lastUpdated={lastUpdated}
+            />
           </div>
           <button
             onClick={sync}
@@ -998,8 +1075,8 @@ export default function Overview() {
             label="total_salary"
             icon="💼"
             accent="#22c55e"
-            loading={loading}
-            value={fmt(totalSalary, cur)}
+            loading={loading || ratesLoading}
+            value={f(totalSalary)}
             sub={`${data.salaries.length} entries`}
             sparkData={spark(data.salaries)}
             onClick={() => openModal("salary")}
@@ -1008,8 +1085,8 @@ export default function Overview() {
             label="savings"
             icon="🐖"
             accent="#38bdf8"
-            loading={loading}
-            value={fmt(totalSavings, cur)}
+            loading={loading || ratesLoading}
+            value={f(totalSavings)}
             sub={`${savRate}% of salary`}
             sparkData={spark(data.savings)}
             onClick={() => openModal("savings")}
@@ -1018,8 +1095,8 @@ export default function Overview() {
             label="bonus"
             icon="⭐"
             accent="#facc15"
-            loading={loading}
-            value={fmt(totalBonus, cur)}
+            loading={loading || ratesLoading}
+            value={f(totalBonus)}
             sub={`${data.bonuses.length} bonuses`}
             sparkData={spark(data.bonuses)}
             onClick={() => openModal("bonus")}
@@ -1028,8 +1105,8 @@ export default function Overview() {
             label="expenses"
             icon="🧾"
             accent="#fb923c"
-            loading={loading}
-            value={fmt(totalExp, cur)}
+            loading={loading || ratesLoading}
+            value={f(totalExp)}
             sub={`${data.expenses.length} items`}
             sparkData={spark(data.expenses)}
             onClick={() => openModal("expense")}
@@ -1152,6 +1229,14 @@ export default function Overview() {
               label="user_id"
               value={user?._id ? `${user._id.slice(0, 12)}…` : "—"}
             />
+            {/* Show the live rate right in the account panel too */}
+            {cur !== "USD" && rates && (
+              <ProfileRow
+                label="fx_rate"
+                value={getRateLabel(rates, "USD", cur) || "—"}
+                accent="#a78bfa"
+              />
+            )}
           </div>
 
           {/* Quick Nav */}
@@ -1249,6 +1334,7 @@ export default function Overview() {
               hour: "2-digit",
               minute: "2-digit",
             })}
+            {cur !== "USD" && !ratesLoading && rates && <> · fx_live</>}
           </span>
           <span
             style={{
