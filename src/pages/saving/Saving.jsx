@@ -24,7 +24,7 @@ const CATEGORIES = [
   "Travel Fund",
   "Other",
 ];
-const CURRENCY_SYMBOL = { USD: "$", KHR: "₭", THB: "฿" };
+const CURRENCY_SYMBOL = { USD: "$", KHR: "៛", THB: "฿" };
 const CATEGORY_STYLE = {
   "Emergency Pool": "bg-red-500/10 text-red-400 border-red-500/20",
   Investment: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
@@ -51,6 +51,7 @@ const VIEW_STYLE = {
 
 export default function Savings() {
   const [viewMode, setViewMode] = useState("TABLE");
+  const [displayCurrency, setDisplayCurrency] = useState("USD");
 
   const {
     records,
@@ -86,7 +87,8 @@ export default function Savings() {
     showDeleteAll,
     setShowDeleteAll,
     handleDeleteAll,
-  } = useSavings();
+    fmtConverted, // Built-in formatter provided by useSavings hook
+  } = useSavings(displayCurrency);
 
   const categoryTotals = CATEGORIES.map((cat) => {
     const items = navFiltered.filter((r) => r.category === cat);
@@ -130,16 +132,22 @@ export default function Savings() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           {
-            label: "TOTAL SAVED (USD)",
-            value: `$${totalUSD.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+            label: `TOTAL SAVED (${displayCurrency})`,
+            value: fmtConverted
+              ? fmtConverted(totalUSD)
+              : `$${totalUSD.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
           },
           {
-            label: "THIS YEAR (USD)",
-            value: `$${thisYearUSD.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+            label: `THIS YEAR (${displayCurrency})`,
+            value: fmtConverted
+              ? fmtConverted(thisYearUSD)
+              : `$${thisYearUSD.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
           },
           {
-            label: "THIS MONTH (USD)",
-            value: `$${thisMonthUSD.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+            label: `THIS MONTH (${displayCurrency})`,
+            value: fmtConverted
+              ? fmtConverted(thisMonthUSD)
+              : `$${thisMonthUSD.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
           },
           { label: "THIS MONTH ENTRIES", value: thisMonthRecords.length },
         ].map((s) => (
@@ -208,10 +216,10 @@ export default function Savings() {
           </div>
           <p className="text-[10px] text-white/25 mt-0.5">
             {navFiltered.length}{" "}
-            {navFiltered.length !== 1 ? "entries" : "entry"} · $
-            {navMonthUSD.toLocaleString(undefined, {
-              minimumFractionDigits: 2,
-            })}{" "}
+            {navFiltered.length !== 1 ? "entries" : "entry"} ·{" "}
+            {fmtConverted
+              ? fmtConverted(navMonthUSD)
+              : `$${navMonthUSD.toLocaleString()}`}{" "}
             saved
           </p>
           {isCurrentMonth && (
@@ -248,10 +256,9 @@ export default function Savings() {
               <div className="min-w-0">
                 <p className="text-[10px] text-white/60 truncate">{cat}</p>
                 <p className="text-[11px] text-white/80">
-                  $
-                  {total.toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                  })}
+                  {fmtConverted
+                    ? fmtConverted(total)
+                    : `$${total.toLocaleString()}`}
                 </p>
                 <p className="text-[9px] text-white/25">
                   {count} {count === 1 ? "entry" : "entries"}
@@ -262,7 +269,7 @@ export default function Savings() {
         </div>
       )}
 
-      {/* ── Filter Bar + View Switcher ── */}
+      {/* ── Filter Bar + Controls Switchers ── */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         {/* Category filters */}
         <div className="flex flex-wrap gap-2">
@@ -285,21 +292,41 @@ export default function Savings() {
           ))}
         </div>
 
-        {/* View mode switcher */}
-        <div className="flex items-center gap-1 border border-white/[0.06] bg-white/[0.02] rounded-sm p-1">
-          {VIEW_MODES.map((mode) => (
-            <button
-              key={mode}
-              onClick={() => setViewMode(mode)}
-              className={`px-3 py-1 rounded-sm text-[10px] tracking-widest border transition-all ${
-                viewMode === mode
-                  ? VIEW_STYLE[mode]
-                  : "border-transparent text-white/25 hover:text-white/50"
-              }`}
-            >
-              {mode}
-            </button>
-          ))}
+        {/* Right Switchers: Currencies and Layout views */}
+        <div className="flex items-center gap-2">
+          {/* Segmented Currency Selector */}
+          <div className="flex items-center gap-1 border border-white/[0.06] bg-white/[0.02] rounded-sm p-1">
+            {CURRENCIES.map((curr) => (
+              <button
+                key={curr}
+                onClick={() => setDisplayCurrency(curr)}
+                className={`px-3 py-1 rounded-sm text-[10px] tracking-widest border transition-all ${
+                  displayCurrency === curr
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                    : "border-transparent text-white/25 hover:text-white/50"
+                }`}
+              >
+                {curr}
+              </button>
+            ))}
+          </div>
+
+          {/* View mode switcher */}
+          <div className="flex items-center gap-1 border border-white/[0.06] bg-white/[0.02] rounded-sm p-1">
+            {VIEW_MODES.map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setViewMode(mode)}
+                className={`px-3 py-1 rounded-sm text-[10px] tracking-widest border transition-all ${
+                  viewMode === mode
+                    ? VIEW_STYLE[mode]
+                    : "border-transparent text-white/25 hover:text-white/50"
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -320,7 +347,7 @@ export default function Savings() {
               <div className="grid grid-cols-[1fr_1fr_1fr_1fr_auto] text-[9px] tracking-[0.18em] text-white/20 border-b border-white/[0.06] px-4 py-2 bg-white/[0.02]">
                 <span>PERIOD</span>
                 <span>AMOUNT</span>
-                <span>USD VALUE</span>
+                <span>CONVERTED ({displayCurrency})</span>
                 <span>CATEGORY</span>
                 <span>ACTIONS</span>
               </div>
@@ -336,11 +363,10 @@ export default function Savings() {
                     {CURRENCY_SYMBOL[rec.currency]}
                     {Number(rec.amount).toLocaleString()} {rec.currency}
                   </span>
-                  <span className="text-white/50">
-                    $
-                    {Number(rec.amountUSD).toLocaleString(undefined, {
-                      minimumFractionDigits: 2,
-                    })}
+                  <span className="text-white/50 font-semibold">
+                    {fmtConverted
+                      ? fmtConverted(rec.amountUSD)
+                      : `$${Number(rec.amountUSD).toLocaleString()}`}
                   </span>
                   <span>
                     <span
@@ -397,11 +423,10 @@ export default function Savings() {
                       </span>
                     </p>
                     <p className="text-[11px] text-white/35 mt-0.5">
-                      ≈ $
-                      {Number(rec.amountUSD).toLocaleString(undefined, {
-                        minimumFractionDigits: 2,
-                      })}{" "}
-                      USD
+                      ≈{" "}
+                      {fmtConverted
+                        ? fmtConverted(rec.amountUSD)
+                        : `$${Number(rec.amountUSD).toLocaleString()}`}
                     </p>
                   </div>
 
@@ -452,11 +477,10 @@ export default function Savings() {
                         {Number(rec.amount).toLocaleString()} {rec.currency}
                       </span>
                       <span className="text-[10px] text-white/30">
-                        ≈ $
-                        {Number(rec.amountUSD).toLocaleString(undefined, {
-                          minimumFractionDigits: 2,
-                        })}{" "}
-                        USD
+                        ≈{" "}
+                        {fmtConverted
+                          ? fmtConverted(rec.amountUSD)
+                          : `$${Number(rec.amountUSD).toLocaleString()}`}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 mt-0.5 flex-wrap">
@@ -539,10 +563,12 @@ export default function Savings() {
                   onChange={(e) =>
                     setForm((f) => ({ ...f, currency: e.target.value }))
                   }
-                  className="w-full bg-[#0c0c0c] border border-white/[0.08] rounded-sm px-3 py-2 text-[12px] text-white/80 focus:outline-none focus:border-white/20"
+                  className="w-full bg-[#0c0c0c] border border-white/[0.08] rounded-sm px-3 py-2 text-[12px] text-white/80 focus:outline-none focus:border-white/20 font-mono"
                 >
                   {CURRENCIES.map((c) => (
-                    <option key={c}>{c}</option>
+                    <option key={c} className="bg-[#121212]">
+                      {c}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -561,11 +587,11 @@ export default function Savings() {
                       monthNumber: Number(e.target.value),
                     }))
                   }
-                  className="w-full bg-[#0c0c0c] border border-white/[0.08] rounded-sm px-3 py-2 text-[12px] text-white/80 focus:outline-none focus:border-white/20"
+                  className="w-full bg-[#0c0c0c] border border-white/[0.08] rounded-sm px-3 py-2 text-[12px] text-white/80 focus:outline-none focus:border-white/20 font-mono"
                 >
                   {MONTHS.map((m, idx) => (
-                    <option key={m} value={idx + 1}>
-                      {m}
+                    <option key={m} value={idx + 1} className="bg-[#121212]">
+                      {m.toUpperCase()}
                     </option>
                   ))}
                 </select>
@@ -668,6 +694,7 @@ export default function Savings() {
           </div>
         </div>
       )}
+
       {/* ── Delete All Confirm ── */}
       {showDeleteAll && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">

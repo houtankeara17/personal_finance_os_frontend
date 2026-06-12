@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useFinance } from "../context/FinanceContext";
 import { plansApi } from "../api/planApi";
+import { useCurrencyRates } from "./useCurrencyRates";
 
 const _now = new Date();
 export const MAX_YEAR = _now.getFullYear();
@@ -30,10 +31,9 @@ export const MONTHS = [
   "December",
 ];
 
-// ─── Date Range Filter Modes ─────────────────────────────────────────────────
 export const FILTER_MODES = [
   "TODAY",
-  "YTD",
+  "YESTERDAY",
   "LAST_1_MONTH",
   "LAST_2_MONTHS",
   "CUSTOM",
@@ -41,40 +41,50 @@ export const FILTER_MODES = [
 
 export const FILTER_LABELS = {
   TODAY: "TODAY",
-  YTD: "YTD",
+  YESTERDAY: "YESTERDAY",
   LAST_1_MONTH: "LAST 1M",
   LAST_2_MONTHS: "LAST 2M",
   CUSTOM: "CUSTOM",
 };
 
-const fmt = (d) => d.toISOString().split("T")[0];
+// Standardizes formatting to localized structure strings (YYYY-MM-DD)
+const fmt = (d) => {
+  const Y = d.getFullYear();
+  const M = String(d.getMonth() + 1).padStart(2, "0");
+  const D = String(d.getDate()).padStart(2, "0");
+  return `${Y}-${M}-${D}`;
+};
 
-// Computes the {startDate, endDate} window for a given filter mode
 export const getDateRange = (mode, year, month) => {
   const today = new Date();
-
   switch (mode) {
-    case "TODAY": {
+    case "TODAY":
       return { startDate: fmt(today), endDate: fmt(today) };
-    }
+
+    case "YESTERDAY":
     case "YTD": {
-      const start = new Date(today.getFullYear(), 0, 1);
-      return { startDate: fmt(start), endDate: fmt(today) };
+      // Handles both "YESTERDAY" and fallback raw "YTD" button strings safely
+      const yesterday = new Date();
+      yesterday.setDate(today.getDate() - 1);
+      return { startDate: fmt(yesterday), endDate: fmt(yesterday) };
     }
+
     case "LAST_1_MONTH": {
-      const start = new Date(today);
+      const start = new Date();
       start.setMonth(start.getMonth() - 1);
       return { startDate: fmt(start), endDate: fmt(today) };
     }
+
     case "LAST_2_MONTHS": {
-      const start = new Date(today);
+      const start = new Date();
       start.setMonth(start.getMonth() - 2);
       return { startDate: fmt(start), endDate: fmt(today) };
     }
+
     case "CUSTOM":
     default: {
       const start = new Date(year, month - 1, 1);
-      const end = new Date(year, month, 0); // last day of selected month
+      const end = new Date(year, month, 0);
       return { startDate: fmt(start), endDate: fmt(end) };
     }
   }
@@ -93,12 +103,16 @@ export const emptyForm = {
   noted: "",
 };
 
-export function usePlans() {
+export function usePlans(targetCurrency = "USD") {
   const { syncHeaders, addNotice } = useFinance();
+
+  // Exchange rates framework synchronized with dynamic target currencies
+  const { rates, ratesLoading, fmtConverted } =
+    useCurrencyRates(targetCurrency);
 
   const [curYear, setCurYear] = useState(MAX_YEAR);
   const [curMonth, setCurMonth] = useState(MAX_MONTH);
-  const [filterMode, setFilterMode] = useState("CUSTOM"); // default = old month-nav behavior
+  const [filterMode, setFilterMode] = useState("CUSTOM");
   const [viewMode, setViewMode] = useState("TABLE");
   const [allRecords, setAllRecords] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -109,6 +123,14 @@ export function usePlans() {
   const [deleteId, setDeleteId] = useState(null);
   const [showDeleteAll, setShowDeleteAll] = useState(false);
   const [imagePreviews, setImagePreviews] = useState([]);
+
+  useEffect(() => {
+    return () => {
+      imagePreviews.forEach((url) => {
+        if (url && url.startsWith("blob:")) URL.revokeObjectURL(url);
+      });
+    };
+  }, [imagePreviews]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -132,20 +154,31 @@ export function usePlans() {
 
   const isCurrentMonth = curYear === MAX_YEAR && curMonth === MAX_MONTH;
 
-  const dateRange = getDateRange(filterMode, curYear, curMonth);
+  const dateRange = useMemo(() => {
+    return getDateRange(filterMode, curYear, curMonth);
+  }, [filterMode, curYear, curMonth]);
 
-  // Client-side filter applied on top of the full record set
+  // Dynamic filter array mapped via structured client calendar definitions
   const records = useMemo(() => {
-    const start = new Date(dateRange.startDate);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(dateRange.endDate);
-    end.setHours(23, 59, 59, 999);
+    if (!dateRange.startDate || !dateRange.endDate) return allRecords;
+
+    // Split items safely to avoid cross-day time shifting bugs
+    const [sYear, sMonth, sDay] = dateRange.startDate.split("-").map(Number);
+    const [eYear, eMonth, eDay] = dateRange.endDate.split("-").map(Number);
+
+    // Structural generation running strictly relative to user browser local time
+    const start = new Date(sYear, sMonth - 1, sDay, 0, 0, 0, 0).getTime();
+    const end = new Date(eYear, eMonth - 1, eDay, 23, 59, 59, 999).getTime();
 
     return allRecords.filter((r) => {
-      const created = new Date(r.createdAt);
-      return created >= start && created <= end;
+      // Prioritize targetDate deadlines; fall back cleanly to creation metadata strings
+      const rawDate = r.targetDate ? r.targetDate : r.createdAt;
+      if (!rawDate) return false;
+
+      const targetTime = new Date(rawDate).getTime();
+      return targetTime >= start && targetTime <= end;
     });
-  }, [allRecords, dateRange.startDate, dateRange.endDate]);
+  }, [allRecords, dateRange]);
 
   const goMonth = (delta) => {
     let m = curMonth + delta;
@@ -182,9 +215,7 @@ export function usePlans() {
       targetAmount: rec.targetAmount,
       currency: rec.currency,
       currentFunding: rec.currentFunding || 0,
-      targetDate: rec.targetDate
-        ? new Date(rec.targetDate).toISOString().split("T")[0]
-        : "",
+      targetDate: rec.targetDate ? rec.targetDate.split("T")[0] : "",
       status: rec.status,
       priority: rec.priority,
       images: rec.images || [],
@@ -197,11 +228,14 @@ export function usePlans() {
   const handleFilesChange = (e) => {
     const files = Array.from(e.target.files);
     files.forEach((file) => {
-      if (file.size > 3 * 1024 * 1024)
+      if (file.size > 3 * 1024 * 1024) {
         return addNotice("Images must be under 3MB.", "error");
+      }
+      const objectUrl = URL.createObjectURL(file);
+      setImagePreviews((prev) => [...prev, objectUrl]);
+
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImagePreviews((prev) => [...prev, reader.result]);
         setForm((f) => ({ ...f, images: [...f.images, reader.result] }));
       };
       reader.readAsDataURL(file);
@@ -209,6 +243,10 @@ export function usePlans() {
   };
 
   const removeImage = (idx) => {
+    const targetedPreview = imagePreviews[idx];
+    if (targetedPreview && targetedPreview.startsWith("blob:")) {
+      URL.revokeObjectURL(targetedPreview);
+    }
     setImagePreviews((prev) => prev.filter((_, i) => i !== idx));
     setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== idx) }));
   };
@@ -226,18 +264,30 @@ export function usePlans() {
     setSubmitting(true);
     try {
       const num = Number(form.targetAmount);
-      const targetAmountUSD =
-        form.currency === "KHR"
-          ? num / 4000
-          : form.currency === "THB"
-            ? num / 35
-            : num;
+
+      let targetAmountUSD = num;
+      if (form.currency !== "USD") {
+        const liveRate = rates ? rates[form.currency] : null;
+        if (liveRate) {
+          targetAmountUSD = num / liveRate;
+        } else {
+          targetAmountUSD =
+            form.currency === "KHR"
+              ? num / 4000
+              : form.currency === "THB"
+                ? num / 35
+                : num;
+        }
+      }
 
       const payload = {
         ...form,
         targetAmount: num,
         targetAmountUSD,
         currentFunding: Number(form.currentFunding) || 0,
+        targetDate: form.targetDate
+          ? new Date(form.targetDate).toISOString()
+          : null,
       };
 
       const data = editTarget
@@ -298,7 +348,6 @@ export function usePlans() {
     }
   };
 
-  // Derived metrics — computed from the currently filtered `records`
   const totalTarget = records.reduce((s, r) => s + (r.targetAmountUSD || 0), 0);
   const totalFunded = records.reduce((s, r) => s + (r.currentFunding || 0), 0);
   const accomplished = records.filter(
@@ -314,7 +363,7 @@ export function usePlans() {
     viewMode,
     setViewMode,
     records,
-    loading,
+    loading: loading || ratesLoading,
     showModal,
     editTarget,
     form,
@@ -327,6 +376,8 @@ export function usePlans() {
     totalFunded,
     accomplished,
     active,
+    rates,
+    fmtConverted,
     setCurYear,
     setCurMonth,
     setFilterMode,

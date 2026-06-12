@@ -13,7 +13,11 @@ export const emptyForm = {
   noted: "",
 };
 
-export function useSavings() {
+// ── Exchange rates (USD base) ──
+const RATES = { USD: 1, KHR: 4100, THB: 36 };
+const CURRENCY_SYMBOL = { USD: "$", KHR: "៛", THB: "฿" };
+
+export function useSavings(targetCurrency = "USD") {
   const { syncHeaders, addNotice } = useFinance();
 
   // ── Data ──
@@ -114,9 +118,6 @@ export function useSavings() {
 
   const closeModal = () => setShowModal(false);
 
-  // ── Exchange rates (USD base) ──
-  const RATES = { USD: 1, KHR: 4100, THB: 36 };
-
   // ── Submit ──
   const handleSubmit = async () => {
     if (!form.amount || isNaN(form.amount) || Number(form.amount) <= 0)
@@ -179,6 +180,21 @@ export function useSavings() {
     } finally {
       setShowDeleteAll(false);
     }
+  };
+
+  // ── Dynamic Format Parser Helper ──
+  const fmtConverted = (amountUSD) => {
+    const rate = RATES[targetCurrency] || 1;
+    const converted = amountUSD * rate;
+    const symbol = CURRENCY_SYMBOL[targetCurrency] || "$";
+
+    // Low-fraction rounding check for clean display values
+    const fractionDigits = targetCurrency === "KHR" ? 0 : 2;
+
+    return `${symbol}${converted.toLocaleString(undefined, {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    })}`;
   };
 
   // ── Derived stats ──
@@ -251,5 +267,8 @@ export function useSavings() {
     showDeleteAll,
     setShowDeleteAll,
     handleDeleteAll,
+    // currency extensions
+    rates: RATES,
+    fmtConverted,
   };
 }

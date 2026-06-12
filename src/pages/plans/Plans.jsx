@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   usePlans,
   CURRENCIES,
@@ -9,8 +9,6 @@ import {
   FILTER_MODES,
   FILTER_LABELS,
 } from "../../hooks/usePlan";
-
-const CURRENCY_SYMBOL = { USD: "$", KHR: "៛", THB: "฿" };
 
 const STATUS_STYLE = {
   Dreaming: "bg-white/[0.04] text-white/40 border border-white/[0.08]",
@@ -34,7 +32,11 @@ const VIEW_STYLE = {
 };
 
 export default function Plans() {
-  const p = usePlans();
+  // 1. Local track state for the live display currency rule context
+  const [displayCurrency, setDisplayCurrency] = useState("USD");
+
+  // 2. Feed currency selector into the main context initialization payload hook
+  const p = usePlans(displayCurrency);
   const currentMode = p.viewMode || "TABLE";
 
   return (
@@ -50,9 +52,9 @@ export default function Plans() {
           </h1>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
-            {p.records.length > 0 && (
+            {p.records?.length > 0 && (
               <button
                 onClick={() => p.setShowDeleteAll(true)}
                 className="flex items-center gap-2 px-4 py-2 bg-red-500/[0.06] hover:bg-red-500/[0.12] border border-red-500/20 rounded-sm text-[11px] tracking-widest text-red-500/60 hover:text-red-400 transition-all"
@@ -70,19 +72,25 @@ export default function Plans() {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats Dashboard Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           {
-            label: "TOTAL TARGET (USD)",
-            value: `$${p.totalTarget.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+            label: `TOTAL TARGET (${displayCurrency})`,
+            // ✅ Fix: Uses fmtConverted to dynamically parse & format based on token rules
+            value: p.fmtConverted
+              ? p.fmtConverted(p.totalTarget || 0)
+              : `$${(p.totalTarget || 0).toLocaleString()}`,
           },
           {
-            label: "TOTAL FUNDED",
-            value: `$${p.totalFunded.toLocaleString(undefined, { minimumFractionDigits: 2 })}`,
+            label: `TOTAL FUNDED (${displayCurrency})`,
+            // ✅ Fix: Converts raw calculations into chosen localization rates automatically
+            value: p.fmtConverted
+              ? p.fmtConverted(p.totalFunded || 0)
+              : `$${(p.totalFunded || 0).toLocaleString()}`,
           },
-          { label: "ACTIVE", value: p.active },
-          { label: "ACCOMPLISHED", value: p.accomplished },
+          { label: "ACTIVE", value: p.active || 0 },
+          { label: "ACCOMPLISHED", value: p.accomplished || 0 },
         ].map((s) => (
           <div
             key={s.label}
@@ -99,7 +107,7 @@ export default function Plans() {
       {/* Date Range Filter */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-1 bg-white/[0.02] border border-white/[0.06] p-1 rounded-sm w-fit">
-          {FILTER_MODES.map((mode) => (
+          {FILTER_MODES?.map((mode) => (
             <button
               key={mode}
               onClick={() => p.setFilterMode(mode)}
@@ -109,7 +117,7 @@ export default function Plans() {
                   : "text-white/40 hover:text-white/70 border border-transparent"
               }`}
             >
-              {FILTER_LABELS[mode]}
+              {FILTER_LABELS?.[mode] || mode}
             </button>
           ))}
         </div>
@@ -132,7 +140,7 @@ export default function Plans() {
                   }
                   className="bg-transparent text-white/80 text-[12px] font-medium tracking-widest uppercase cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
                 >
-                  {MONTHS.map((name, index) => {
+                  {MONTHS?.map((name, index) => {
                     const monthNum = index + 1;
                     return (
                       <option
@@ -153,7 +161,7 @@ export default function Plans() {
                   }
                   className="bg-transparent text-white/80 text-[12px] font-medium tracking-widest cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
                 >
-                  {YEAR_OPTIONS.map((yr) => (
+                  {YEAR_OPTIONS?.map((yr) => (
                     <option
                       key={yr}
                       value={yr}
@@ -182,29 +190,48 @@ export default function Plans() {
         ) : (
           <div className="flex items-center justify-center border border-white/[0.06] rounded-lg px-4 py-2.5 bg-white/[0.01]">
             <p className="text-[10px] tracking-widest text-white/40">
-              {p.dateRange.startDate}{" "}
+              {p.dateRange?.startDate || "—"}{" "}
               <span className="text-white/15 mx-1">→</span>{" "}
-              {p.dateRange.endDate}
+              {p.dateRange?.endDate || "—"}
             </p>
           </div>
         )}
       </div>
 
-      {/* Custom Styled View Mode Switcher Tabs */}
-      <div className="flex items-center gap-1 bg-white/[0.02] border border-white/[0.06] p-1 rounded-sm w-fit">
-        {VIEW_MODES.map((mode) => (
-          <button
-            key={mode}
-            onClick={() => p.setViewMode(mode)}
-            className={`px-3 py-1 text-[9px] tracking-widest font-medium uppercase rounded-[2px] transition-all duration-150 ${
-              currentMode === mode
-                ? VIEW_STYLE[mode]
-                : "text-white/40 hover:text-white/70 border border-transparent"
-            }`}
-          >
-            {mode}
-          </button>
-        ))}
+      <div className="flex items-center justify-between gap-4 w-full">
+        {/* Global Target Currency Selector Tabs */}
+        <div className="flex items-center gap-1 bg-white/[0.02] border border-white/[0.06] p-1 rounded-sm">
+          {CURRENCIES.map((curr) => (
+            <button
+              key={curr}
+              onClick={() => setDisplayCurrency(curr)}
+              className={`px-2.5 py-1 text-[9px] tracking-widest font-medium rounded-[2px] transition-all ${
+                displayCurrency === curr
+                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                  : "text-white/40 hover:text-white/70 border border-transparent"
+              }`}
+            >
+              {curr}
+            </button>
+          ))}
+        </div>
+
+        {/* View Mode Switcher Tabs */}
+        <div className="flex items-center gap-1 bg-white/[0.02] border border-white/[0.06] p-1 rounded-sm w-fit">
+          {VIEW_MODES.map((mode) => (
+            <button
+              key={mode}
+              onClick={() => p.setViewMode(mode)}
+              className={`px-3 py-1 text-[9px] tracking-widest font-medium uppercase rounded-[2px] transition-all duration-150 ${
+                currentMode === mode
+                  ? VIEW_STYLE[mode]
+                  : "text-white/40 hover:text-white/70 border border-transparent"
+              }`}
+            >
+              {mode}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Dynamic Data Wrapper */}
@@ -212,7 +239,7 @@ export default function Plans() {
         <div className="border border-white/[0.06] rounded-sm py-12 text-center text-[11px] text-white/20 tracking-widest">
           LOADING PLANS...
         </div>
-      ) : p.records.length === 0 ? (
+      ) : !p.records || p.records.length === 0 ? (
         <div className="border border-white/[0.06] rounded-sm py-12 text-center text-[11px] text-white/20 tracking-widest">
           NO PLANS FOUND
         </div>
@@ -258,23 +285,20 @@ export default function Plans() {
                           </h3>
                         </div>
 
+                        {/* ✅ Fix: Uses the system formatter to adapt target budget string */}
                         <p className="text-base font-semibold text-white/80 mt-2">
-                          {CURRENCY_SYMBOL[rec.currency] || "$"}
-                          {Number(rec.targetAmount).toLocaleString()}{" "}
-                          <span className="text-xs text-white/40 font-normal">
-                            {rec.currency}
-                          </span>
+                          {p.fmtConverted
+                            ? p.fmtConverted(rec.targetAmountUSD || 0)
+                            : `$${(rec.targetAmountUSD || 0).toLocaleString()}`}
                         </p>
 
                         <div className="flex flex-col gap-0.5 mt-1">
+                          {/* ✅ Fix: Format current funding dynamically using the runtime rate */}
                           <p className="text-[11px] text-white/40">
-                            Funded: $
-                            {Number(rec.currentFunding || 0).toLocaleString(
-                              undefined,
-                              {
-                                minimumFractionDigits: 2,
-                              },
-                            )}
+                            Funded:{" "}
+                            {p.fmtConverted
+                              ? p.fmtConverted(rec.currentFunding || 0)
+                              : `$${(rec.currentFunding || 0).toLocaleString()}`}
                           </p>
                           <p className="text-[10px] text-white/25 tracking-wider">
                             Target:{" "}
@@ -396,19 +420,18 @@ export default function Plans() {
                       </span>
                     </div>
 
-                    <span className="text-white/80">
-                      {CURRENCY_SYMBOL[rec.currency] || "$"}{" "}
-                      {Number(rec.targetAmount).toLocaleString()} {rec.currency}
+                    {/* ✅ Fix: Replace baseline USD logic with dynamic conversion strings */}
+                    <span className="text-white/80 font-medium">
+                      {p.fmtConverted
+                        ? p.fmtConverted(rec.targetAmountUSD || 0)
+                        : `$${(rec.targetAmountUSD || 0).toLocaleString()}`}
                     </span>
 
+                    {/* ✅ Fix: Convert funded columns to the user-selected context token */}
                     <span className="text-white/50">
-                      $
-                      {Number(rec.currentFunding || 0).toLocaleString(
-                        undefined,
-                        {
-                          minimumFractionDigits: 2,
-                        },
-                      )}
+                      {p.fmtConverted
+                        ? p.fmtConverted(rec.currentFunding || 0)
+                        : `$${(rec.currentFunding || 0).toLocaleString()}`}
                     </span>
 
                     <span className="text-white/40 font-normal text-[10px]">
@@ -515,11 +538,16 @@ export default function Plans() {
                           <span className="text-[12px] font-semibold text-white/80 truncate">
                             {rec.title}
                           </span>
+
+                          {/* ✅ Fix: Convert local card metadata cleanly */}
                           <span className="text-[11px] text-white/50 font-medium">
-                            ({CURRENCY_SYMBOL[rec.currency] || "$"}
-                            {Number(rec.targetAmount).toLocaleString()}{" "}
-                            {rec.currency})
+                            (
+                            {p.fmtConverted
+                              ? p.fmtConverted(rec.targetAmountUSD || 0)
+                              : `$${(rec.targetAmountUSD || 0).toLocaleString()}`}
+                            )
                           </span>
+
                           <span className="text-[10px] text-white/25 ml-auto xs:ml-0 font-normal">
                             • Target:{" "}
                             {rec.targetDate
@@ -539,7 +567,11 @@ export default function Plans() {
                             />
                           </div>
                           <span className="text-[9px] text-white/40">
-                            {pct}% Funded
+                            {pct}% Funded (
+                            {p.fmtConverted
+                              ? p.fmtConverted(rec.currentFunding || 0)
+                              : `$${(rec.currentFunding || 0).toLocaleString()}`}
+                            )
                           </span>
                         </div>
                       </div>
@@ -580,7 +612,6 @@ export default function Plans() {
           )}
         </>
       )}
-
       {/* Create / Edit Modal */}
       {p.showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">

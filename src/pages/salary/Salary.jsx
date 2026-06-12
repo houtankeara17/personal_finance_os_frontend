@@ -16,6 +16,7 @@ const MONTHS = [
   "November",
   "December",
 ];
+
 const CURRENCIES = ["USD", "KHR", "THB"];
 const STATUSES = ["Draft", "Confirmed", "Disbursed"];
 const CURRENCY_SYMBOL = { USD: "$", KHR: "៛", THB: "฿" };
@@ -33,10 +34,11 @@ const VIEW_STYLE = {
   LIST: "bg-purple-500/10 text-purple-400 border border-purple-500/20",
 };
 
-const YEAR_OPTIONS = Array.from(
-  { length: MAX_YEAR - 2025 + 1 },
-  (_, i) => 2025 + i,
-);
+// Modify your YEAR_OPTIONS array to include an "ALL" option at the front
+const YEAR_OPTIONS = [
+  "ALL",
+  ...Array.from({ length: MAX_YEAR - 2025 + 1 }, (_, i) => 2025 + i),
+];
 
 const emptyForm = {
   amount: "",
@@ -95,11 +97,12 @@ export default function Salary() {
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    if (file.size > 3 * 1024 * 1024)
+    if (file.size > 3 * 1024 * 1024) {
       return addNotice(
         "Payload constraint: Images must be under 3MB.",
         "error",
       );
+    }
     const reader = new FileReader();
     reader.onloadend = () => {
       setPreviewImage(reader.result);
@@ -122,7 +125,6 @@ export default function Salary() {
     <div className="space-y-6 font-mono text-white max-w-full overflow-x-hidden p-2 sm:p-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 w-full">
-        {/* Left Side: Header Metadata */}
         <div>
           <p className="text-[10px] tracking-[0.2em] text-white/20 uppercase mb-1">
             Income Module
@@ -132,7 +134,6 @@ export default function Salary() {
           </h1>
         </div>
 
-        {/* Right Side: Primary Action Button */}
         <button
           onClick={openCreate}
           className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-white/[0.06] hover:bg-white/[0.1] border border-white/[0.08] rounded-sm text-[11px] tracking-widest text-white/70 transition-all self-start sm:self-auto"
@@ -141,55 +142,66 @@ export default function Salary() {
         </button>
       </div>
 
-      {/* Control Dashboard: Year Selector & View Switcher */}
-      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-        {/* Filter Box (9 Columns) — Bonus page style */}
-        <div className="md:col-span-12 flex items-center justify-between border border-white/[0.06] bg-white/[0.02] rounded-sm px-5 py-3">
-          <button
-            onClick={() => handleYearJump(curYear - 1)}
-            aria-label="Previous year"
-            className="text-white/30 hover:text-white/70 text-lg px-2 transition-colors"
-          >
-            ‹
-          </button>
+      {/* Filter Box — Supports "ALL" Filter */}
+      <div className="md:col-span-12 flex items-center justify-between border border-white/[0.06] bg-white/[0.02] rounded-sm px-5 py-3">
+        {/* Hide/Disable previous button if viewing ALL */}
+        <button
+          onClick={() =>
+            curYear !== "ALL" && handleYearJump(Number(curYear) - 1)
+          }
+          disabled={curYear === "ALL"}
+          aria-label="Previous year"
+          className="text-white/30 hover:text-white/70 text-lg px-2 transition-colors disabled:opacity-0 disabled:cursor-not-allowed"
+        >
+          ‹
+        </button>
 
-          <div className="flex flex-col items-center gap-1">
-            <div className="flex items-center gap-2">
-              <select
-                value={curYear}
-                onChange={(e) => handleYearJump(Number(e.target.value))}
-                className="bg-transparent text-white/80 text-[13px] font-semibold tracking-widest cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
-              >
-                {YEAR_OPTIONS.map((yr) => (
-                  <option
-                    key={yr}
-                    value={yr}
-                    className="bg-[#121212] text-white"
-                  >
-                    {yr}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <p className="text-[10px] text-white/25 mt-0.5">
-              {records.length} record{records.length !== 1 ? "s" : ""} this year
-            </p>
-            {curYear === MAX_YEAR && (
-              <p className="text-[8px] tracking-widest text-white/20">
-                CURRENT YEAR
-              </p>
-            )}
+        <div className="flex flex-col items-center gap-1">
+          <div className="flex items-center gap-2">
+            <select
+              value={curYear}
+              onChange={(e) => {
+                const val = e.target.value;
+                handleYearJump(val === "ALL" ? "ALL" : Number(val));
+              }}
+              className="bg-transparent text-white/80 text-[13px] font-semibold tracking-widest cursor-pointer outline-none border-b border-transparent hover:border-white/20 transition-colors"
+            >
+              {YEAR_OPTIONS.map((yr) => (
+                <option key={yr} value={yr} className="bg-[#121212] text-white">
+                  {yr}
+                </option>
+              ))}
+            </select>
           </div>
 
-          <button
-            onClick={() => handleYearJump(curYear + 1)}
-            disabled={curYear === MAX_YEAR}
-            aria-label="Next year"
-            className="text-white/30 hover:text-white/70 text-lg px-2 transition-colors disabled:opacity-20 disabled:cursor-not-allowed"
-          >
-            ›
-          </button>
+          <p className="text-[10px] text-white/25 mt-0.5">
+            {records.length} record{records.length !== 1 ? "s" : ""}{" "}
+            {curYear === "ALL" ? "in total" : "this year"}
+          </p>
+
+          {curYear === MAX_YEAR && (
+            <p className="text-[8px] tracking-widest text-white/20">
+              CURRENT YEAR
+            </p>
+          )}
+          {curYear === "ALL" && (
+            <p className="text-[8px] tracking-widest text-indigo-400">
+              ALL HISTORICAL DATA
+            </p>
+          )}
         </div>
+
+        {/* Hide/Disable next button if viewing ALL or MAX_YEAR */}
+        <button
+          onClick={() =>
+            curYear !== "ALL" && handleYearJump(Number(curYear) + 1)
+          }
+          disabled={curYear === "ALL" || curYear === MAX_YEAR}
+          aria-label="Next year"
+          className="text-white/30 hover:text-white/70 text-lg px-2 transition-colors disabled:opacity-0 disabled:cursor-not-allowed"
+        >
+          ›
+        </button>
       </div>
 
       {/* Stats Matrix Grid */}
@@ -219,7 +231,6 @@ export default function Salary() {
 
       {/* Control Dashboard: View Switcher */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-white/[0.06] pb-4">
-        {/* View Switcher Container */}
         <div className="flex flex-wrap gap-2 w-full sm:w-auto">
           <div className="flex border border-white/[0.08] rounded-sm p-0.5 bg-white/[0.01] w-full sm:w-auto">
             {VIEW_MODES.map((mode) => (
@@ -480,7 +491,7 @@ export default function Salary() {
         </>
       )}
 
-      {/* Create / Edit Modal (Kept from your initial logic) */}
+      {/* Create / Edit Modal */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="bg-[#0c0c0c] border border-white/[0.08] rounded-sm w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
@@ -614,7 +625,11 @@ export default function Salary() {
                     key={s}
                     type="button"
                     onClick={() => setForm((f) => ({ ...f, status: s }))}
-                    className={`flex-1 py-1.5 rounded-sm text-[10px] tracking-widest border transition-all ${form.status === s ? STATUS_STYLE[s] : "border-white/[0.06] text-white/20 hover:text-white/40"}`}
+                    className={`flex-1 py-1.5 rounded-sm text-[10px] tracking-widest border transition-all ${
+                      form.status === s
+                        ? STATUS_STYLE[s]
+                        : "border-white/[0.06] text-white/20 hover:text-white/40"
+                    }`}
                   >
                     {s.toUpperCase()}
                   </button>
@@ -682,7 +697,7 @@ export default function Salary() {
                   await deleteRecord(deleteId);
                   setDeleteId(null);
                 }}
-                className="flex-1 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-sm text-[10px] tracking-widest text-red-400 evaluation-transition"
+                className="flex-1 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-sm text-[10px] tracking-widest text-red-400 transition-colors"
               >
                 DELETE
               </button>

@@ -8,26 +8,29 @@ export const MAX_YEAR = _now.getFullYear();
 export function useSalary() {
   const { syncHeaders, addNotice } = useFinance();
 
+  // 🔥 Initialize with "ALL" or MAX_YEAR depending on what you want default to be
   const [curYear, setCurYear] = useState(MAX_YEAR);
   const [records, setRecords] = useState([]);
   const [salaryStats, setSalaryStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // ── Fetch all records by Year ───────────────────────────────────────────
+  // ── Unified Fetch Logic ───────────────────────────────────────────
   const fetchAll = useCallback(
     async (year) => {
       setLoading(true);
       try {
-        // Updated API call to ignore month constraints
+        // Passes "ALL" or the specific year number down to your Axios/Fetch wrapper API
         const data = await salaryApi.getAll(year, syncHeaders());
         if (data.success) {
-          setRecords(data.data);
+          // Expects backend payload layout: data.data and data.stats
+          setRecords(data.data || []);
           setSalaryStats(data.stats ?? null);
         } else {
           addNotice(data.message || "Failed to load salary records.", "error");
         }
-      } catch {
+      } catch (err) {
+        console.error("Hook Error:", err);
         addNotice("Network error: Could not reach server.", "error");
       } finally {
         setLoading(false);
@@ -36,16 +39,13 @@ export function useSalary() {
     [syncHeaders, addNotice],
   );
 
-  // Inside useSalary.js
+  // 🔥 FIX: Single, clean listener running on filter updates
   useEffect(() => {
-    // Coerce to a hard Number to guarantee object types are completely stripped out
-    if (curYear) {
-      fetchAll(Number(curYear));
-    }
+    fetchAll(curYear);
   }, [curYear, fetchAll]);
 
   const handleYearJump = (year) => {
-    if (year > MAX_YEAR) return;
+    if (year !== "ALL" && year > MAX_YEAR) return;
     setCurYear(year);
   };
 
@@ -78,6 +78,7 @@ export function useSalary() {
             : "Salary record added successfully.",
           "success",
         );
+        // Refresh with current filter state active
         await fetchAll(curYear);
         return true;
       } else {
@@ -114,11 +115,12 @@ export function useSalary() {
   const totalUSD =
     salaryStats?.totalEarned ??
     records.reduce((s, r) => s + (r.amountUSD || 0), 0);
+
   const disbursed = records.filter((r) => r.status === "Disbursed").length;
   const confirmed = records.filter((r) => r.status === "Confirmed").length;
-  const thisYearRecordsCount = records.filter(
-    (r) => r.year === MAX_YEAR,
-  ).length;
+
+  // Stats should stay calculated on actual real-time records matching your current active year filter
+  const currentViewRecordsCount = records.length;
 
   return {
     curYear,
@@ -128,6 +130,11 @@ export function useSalary() {
     handleYearJump,
     saveRecord,
     deleteRecord,
-    stats: { totalUSD, disbursed, confirmed, thisYear: thisYearRecordsCount },
+    stats: {
+      totalUSD,
+      disbursed,
+      confirmed,
+      totalCount: currentViewRecordsCount,
+    },
   };
 }
